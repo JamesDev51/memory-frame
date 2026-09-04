@@ -1,5 +1,5 @@
 import { getFramePreset, getFrameVariant } from '../presets/frames'
-import { heartClipPolygon } from '../utils/render'
+import { getHeartSlots } from '../presets/layouts'
 import type { CSSProperties, DragEvent } from 'react'
 import type { EditorConfig, PhotoItem } from '../types/editor'
 
@@ -11,6 +11,12 @@ interface PosterPreviewProps {
   onMovePhoto?: (from: number, to: number) => void
   onAddPhoto?: () => void
   interactive?: boolean
+}
+
+const heartGapInset = {
+  narrow: 0.004,
+  normal: 0.009,
+  wide: 0.017,
 }
 
 function frameStyle(config: EditorConfig): CSSProperties {
@@ -51,6 +57,8 @@ export default function PosterPreview({
   const isHeart = config.layout.type === 'heart'
   const gapClass = `gap-${config.gap}`
   const ratio = isHeart ? 1 : config.layout.columns / config.layout.rows
+  const heartSlots = isHeart ? getHeartSlots(slotCount) : []
+  const heartInset = heartGapInset[config.gap]
 
   function handleDragStart(event: DragEvent<HTMLButtonElement>, index: number) {
     event.dataTransfer.setData('text/photo-index', String(index))
@@ -68,20 +76,31 @@ export default function PosterPreview({
       <div
         className={`collage ${gapClass} ${isHeart ? 'heart-collage' : ''}`}
         style={{
-          gridTemplateColumns: `repeat(${config.layout.columns}, minmax(0, 1fr))`,
-          gridTemplateRows: `repeat(${config.layout.rows}, minmax(0, 1fr))`,
+          gridTemplateColumns: isHeart ? undefined : `repeat(${config.layout.columns}, minmax(0, 1fr))`,
+          gridTemplateRows: isHeart ? undefined : `repeat(${config.layout.rows}, minmax(0, 1fr))`,
           aspectRatio: String(ratio),
-          clipPath: isHeart ? `polygon(${heartClipPolygon()})` : undefined,
         }}
       >
         {slots.map((_, index) => {
           const photo = photos[index]
+          const heartSlot = heartSlots[index]
+          const heartStyle: CSSProperties | undefined = isHeart && heartSlot
+            ? {
+                position: 'absolute',
+                left: `${(heartSlot.x + heartInset) * 100}%`,
+                top: `${(heartSlot.y + heartInset) * 100}%`,
+                width: `${Math.max(0.01, heartSlot.width - heartInset * 2) * 100}%`,
+                height: `${Math.max(0.01, heartSlot.height - heartInset * 2) * 100}%`,
+              }
+            : undefined
+
           if (!photo) {
             return (
               <button
                 key={`empty-${index}`}
                 type="button"
                 className="photo-cell empty-photo"
+                style={heartStyle}
                 onClick={interactive ? onAddPhoto : undefined}
                 aria-label="사진 추가"
               >
@@ -95,6 +114,7 @@ export default function PosterPreview({
               key={photo.id}
               type="button"
               className={`photo-cell ${config.shadow === 'on' ? 'with-shadow' : ''} ${selectedPhotoId === photo.id ? 'selected-photo' : ''}`}
+              style={heartStyle}
               draggable={interactive}
               onDragStart={(event) => handleDragStart(event, index)}
               onDragOver={(event) => event.preventDefault()}
