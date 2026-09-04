@@ -1,0 +1,8 @@
+.heart-collage {
+  position: relative;
+  display: block;
+}
+
+.heart-collage .photo-cell {
+  margin: 0;
+}
