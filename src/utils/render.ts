@@ -1,5 +1,6 @@
 import { jsPDF } from 'jspdf'
 import { getFramePreset, getFrameVariant } from '../presets/frames'
+import { getHeartSlots } from '../presets/layouts'
 import type { EditorConfig, PhotoItem } from '../types/editor'
 
 export const PRINT_SIZES = {
@@ -14,6 +15,12 @@ const gapFactor = {
   narrow: 0.006,
   normal: 0.014,
   wide: 0.026,
+}
+
+const heartGapInset = {
+  narrow: 0.004,
+  normal: 0.009,
+  wide: 0.017,
 }
 
 function loadImage(url: string): Promise<HTMLImageElement> {
@@ -71,32 +78,6 @@ function createCheckPattern(
   return ctx.createPattern(tile, 'repeat')
 }
 
-export function heartPoints(count = 90) {
-  const raw = Array.from({ length: count }, (_, index) => {
-    const t = (Math.PI * 2 * index) / count
-    const x = 16 * Math.sin(t) ** 3
-    const y = 13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t)
-    return { x, y }
-  })
-  const xs = raw.map((point) => point.x)
-  const ys = raw.map((point) => point.y)
-  const minX = Math.min(...xs)
-  const maxX = Math.max(...xs)
-  const minY = Math.min(...ys)
-  const maxY = Math.max(...ys)
-
-  return raw.map((point) => ({
-    x: (point.x - minX) / (maxX - minX),
-    y: 1 - (point.y - minY) / (maxY - minY),
-  }))
-}
-
-export function heartClipPolygon() {
-  return heartPoints(70)
-    .map((point) => `${(point.x * 100).toFixed(2)}% ${(point.y * 100).toFixed(2)}%`)
-    .join(', ')
-}
-
 function getCollageRect(width: number, height: number, config: EditorConfig) {
   const outerMarginX = width * 0.085
   const outerMarginY = height * 0.072
@@ -117,19 +98,6 @@ function getCollageRect(width: number, height: number, config: EditorConfig) {
     width: collageW,
     height: collageH,
   }
-}
-
-function applyHeartClip(ctx: CanvasRenderingContext2D, rect: { x: number; y: number; width: number; height: number }) {
-  const points = heartPoints(100)
-  ctx.beginPath()
-  points.forEach((point, index) => {
-    const x = rect.x + point.x * rect.width
-    const y = rect.y + point.y * rect.height
-    if (index === 0) ctx.moveTo(x, y)
-    else ctx.lineTo(x, y)
-  })
-  ctx.closePath()
-  ctx.clip()
 }
 
 function drawPhotoCover(
@@ -201,24 +169,41 @@ async function renderToCanvas(config: EditorConfig, photos: PhotoItem[], width: 
   }
 
   const rect = getCollageRect(width, height, config)
-  const gap = width * gapFactor[config.gap]
   const rows = config.layout.rows
   const columns = config.layout.columns
-  const cellW = (rect.width - gap * (columns - 1)) / columns
-  const cellH = (rect.height - gap * (rows - 1)) / rows
   const images = await Promise.all(photos.map((photo) => loadImage(photo.url)))
 
-  ctx.save()
-  if (config.layout.type === 'heart') applyHeartClip(ctx, rect)
+  if (config.layout.type === 'heart') {
+    const slots = getHeartSlots(config.layout.photoCount)
+    const inset = heartGapInset[config.gap]
 
-  photos.forEach((photo, index) => {
-    const row = Math.floor(index / columns)
-    const col = index % columns
-    const x = rect.x + col * (cellW + gap)
-    const y = rect.y + row * (cellH + gap)
-    drawPhotoCover(ctx, images[index], photo, x, y, cellW, cellH, config.shadow === 'on')
-  })
-  ctx.restore()
+    photos.forEach((photo, index) => {
+      const slot = slots[index]
+      const image = images[index]
+      if (!slot || !image) return
+
+      const x = rect.x + (slot.x + inset) * rect.width
+      const y = rect.y + (slot.y + inset) * rect.height
+      const cellW = Math.max(1, (slot.width - inset * 2) * rect.width)
+      const cellH = Math.max(1, (slot.height - inset * 2) * rect.height)
+
+      drawPhotoCover(ctx, image, photo, x, y, cellW, cellH, config.shadow === 'on')
+    })
+  } else {
+    const gap = width * gapFactor[config.gap]
+    const cellW = (rect.width - gap * (columns - 1)) / columns
+    const cellH = (rect.height - gap * (rows - 1)) / rows
+
+    photos.forEach((photo, index) => {
+      const image = images[index]
+      if (!image) return
+      const row = Math.floor(index / columns)
+      const col = index % columns
+      const x = rect.x + col * (cellW + gap)
+      const y = rect.y + row * (cellH + gap)
+      drawPhotoCover(ctx, image, photo, x, y, cellW, cellH, config.shadow === 'on')
+    })
+  }
 
   return canvas
 }
