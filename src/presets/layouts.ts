@@ -1,10 +1,29 @@
-import type { LayoutPreset } from '../types/editor'
+import type { LayoutPreset, LayoutType } from '../types/editor'
 
-export const layoutPresets: LayoutPreset[] = [
-  { id: 'grid-4', name: '4장', type: 'grid', photoCount: 4, rows: 2, columns: 2, defaultGap: 'normal' },
-  { id: 'grid-6', name: '6장', type: 'grid', photoCount: 6, rows: 2, columns: 3, defaultGap: 'normal' },
-  { id: 'grid-9', name: '9장', type: 'grid', photoCount: 9, rows: 3, columns: 3, defaultGap: 'normal' },
-  { id: 'grid-12', name: '12장', type: 'grid', photoCount: 12, rows: 3, columns: 4, defaultGap: 'normal' },
-  { id: 'grid-16', name: '16장', type: 'grid', photoCount: 16, rows: 4, columns: 4, defaultGap: 'normal' },
-  { id: 'grid-20', name: '20장', type: 'grid', photoCount: 20, rows: 4, columns: 5, defaultGap: 'normal' },
-]
+const gridShapes: Record<number, [number, number]> = {
+  4: [2, 2],
+  6: [2, 3],
+  9: [3, 3],
+  12: [3, 4],
+  16: [4, 4],
+  20: [4, 5],
+}
+
+export const PHOTO_COUNTS = [4, 6, 9, 12, 16, 20]
+
+export function getLayoutPreset(type: LayoutType, photoCount: number): LayoutPreset {
+  const [rows, columns] = gridShapes[photoCount] ?? [3, 3]
+  return {
+    id: `${type}-${photoCount}`,
+    type,
+    photoCount,
+    rows,
+    columns,
+    label: type === 'heart' ? `하트 · ${photoCount}장` : `${columns} × ${rows} · ${photoCount}장`,
+  }
+}
+
+export const layoutOptions = {
+  grid: PHOTO_COUNTS.map((count) => getLayoutPreset('grid', count)),
+  heart: PHOTO_COUNTS.map((count) => getLayoutPreset('heart', count)),
+}
