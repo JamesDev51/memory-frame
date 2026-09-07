@@ -477,3 +477,20 @@ h1, h2, h3, p, button, label, summary { word-break: keep-all; overflow-wrap: bre
 .scene-object .frame-proof { width: 100%; border-width: clamp(3px, .7vw, 10px); box-shadow: 6px 10px 16px #241d1838; }
 .scene-sheet > .print-note { margin-top: 12px; }
 @media (max-width: 640px) { .scene-sheet { padding: 16px; } .scene-sheet h2 { font-size: 22px; } }
+
+/* Readable controls at narrow laptop widths. */
+.control-panel .control-title { flex-wrap: wrap; gap: 6px; }
+.control-panel .control-title strong { line-height: 1.5; }
+.control-panel .inline-controls { display: grid; grid-template-columns: 1fr; gap: 20px; }
+.control-panel .control-block { width: 100%; min-width: 0; }
+.control-panel .segmented { flex-wrap: wrap; }
+.control-panel .segmented button { min-width: 70px; white-space: nowrap; padding: 10px 8px; }
+.control-panel p { word-break: keep-all; overflow-wrap: normal; line-height: 1.65; }
+.control-panel .advanced-body { padding-top: 0; }
+.control-panel .tiny-counts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.control-panel .tiny-counts button { min-width: 0; min-height: 40px; }
+.control-panel .frame-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.control-panel .frame-option { width: auto; min-width: 0; }
+.control-panel .full, .save-main { white-space: normal; text-wrap: balance; line-height: 1.5; }
+.editor-heading h2, .sheet-title-row h2 { text-wrap: balance; line-height: 1.3; }
+.library-heading h3, .library-filters button, .finish-options button { white-space: nowrap; }

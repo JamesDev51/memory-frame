@@ -1,6 +1,6 @@
 import { getFramePreset, getFrameVariant } from '../presets/frames'
 import type { EditorConfig, PhotoItem } from '../types/editor'
-import { paper, slotsFor, photoPlacement, shadowStrength, type Rect } from './geometry'
+import { paper, slotsFor, photoPlacement, shadowStrength, cardRect, photoRect, type Rect } from './geometry'
 export { PRINT_SIZES, type PrintSize } from './geometry'
 
 export function loadImage(url: string): Promise<HTMLImageElement> {
@@ -20,18 +20,24 @@ function gray(color: string) {
 export function matColor(config: EditorConfig) {
   return config.frameId === 'black' || config.frameVariantId === 'dot-black' ? '#171717' : '#fffaf5'
 }
-export function drawPhoto(ctx: CanvasRenderingContext2D, image: HTMLImageElement, photo: PhotoItem, rect: Rect, config: EditorConfig) {
-  const { x, y, width, height } = rect
+export function drawCard(ctx: CanvasRenderingContext2D, rect: Rect, config: EditorConfig) {
+  const {x,y,width,height} = cardRect(config, rect)
   ctx.save()
   const strength = shadowStrength(config.shadow)
   if (strength > 0) {
-    ctx.shadowColor = `rgba(30,30,30,${strength * .38})`
-    ctx.shadowBlur = width * (.015 + strength * .06)
-    ctx.shadowOffsetY = width * strength * .036
+    ctx.shadowColor = `rgba(25,22,20,${strength * .55})`
+    ctx.shadowBlur = width * (.02 + strength * .07)
+    ctx.shadowOffsetX = width * strength * .008
+    ctx.shadowOffsetY = width * strength * .04
   }
-  ctx.fillStyle = config.colorMode === 'all-gray' ? gray(matColor(config)) : matColor(config)
-  ctx.fillRect(x, y, width, height)
+  const background = config.photoStyle === 'polaroid' ? '#ffffff' : matColor(config)
+  ctx.fillStyle = config.colorMode === 'all-gray' ? gray(background) : background
+  ctx.fillRect(x,y,width,height)
   ctx.restore()
+}
+export function drawPhoto(ctx: CanvasRenderingContext2D, image: HTMLImageElement, photo: PhotoItem, rect: Rect, config: EditorConfig) {
+  drawCard(ctx,rect,config)
+  const { x, y, width, height } = photoRect(config, rect)
   ctx.save()
   ctx.beginPath(); ctx.rect(x, y, width, height); ctx.clip()
   const p = photoPlacement(photo, width, height)
@@ -55,7 +61,7 @@ export function drawPhoto(ctx: CanvasRenderingContext2D, image: HTMLImageElement
   }
   ctx.restore()
 }
-export async function renderToCanvas(config: EditorConfig, photos: (PhotoItem | null)[], width: number, height: number, cancelled = () => false) {
+export async function renderToCanvas(config: EditorConfig, photos: (PhotoItem | null)[], width: number, height: number, cancelled = () => false, showEmpty = false) {
   const canvas = document.createElement('canvas')
   canvas.width = width; canvas.height = height
   const ctx = canvas.getContext('2d', { alpha: false })
@@ -77,10 +83,10 @@ export async function renderToCanvas(config: EditorConfig, photos: (PhotoItem | 
   }
   const slots = slotsFor(config, width, height)
   try {
-    for (let i = 0; i < photos.length && i < slots.length; i++) {
+    for (let i = 0; i < slots.length; i++) {
       if (cancelled()) break
       const photo = photos[i]
-      if (!photo) continue
+      if (!photo) { if (showEmpty) drawCard(ctx, slots[i], config); continue }
       const image = await loadImage(photo.url)
       if (!cancelled()) drawPhoto(ctx, image, photo, slots[i], config)
     }

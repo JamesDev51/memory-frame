@@ -10,7 +10,7 @@ execFileSync('node_modules/.bin/tsc', ['src/utils/geometry.ts', 'src/utils/histo
 const geometryPath = path.join(root, 'utils/geometry.js')
 await fs.writeFile(geometryPath, (await fs.readFile(geometryPath, 'utf8')).replace("'../presets/layouts'", "'../presets/layouts.js'"))
 const { getLayoutPreset, PHOTO_COUNTS, HEART_PHOTO_COUNTS } = await import(pathToFileURL(path.join(root, 'presets/layouts.js')))
-const { slotsFor, paper, photoPlacement, photoDpis, safeMarginMm, shadowStrength, effectiveGapRatio, maxGapRatio } = await import(pathToFileURL(path.join(root, 'utils/geometry.js')))
+const { slotsFor, paper, photoPlacement, photoDpis, safeMarginMm, shadowStrength, effectiveGapRatio, maxGapRatio, cardRect, photoRect } = await import(pathToFileURL(path.join(root, 'utils/geometry.js')))
 const base = { frameId: 'white', frameVariantId: 'white', shadow: 'off', colorMode: 'color' }
 test('all supported combinations have exact count, non-overlapping tiles within the page', () => {
   for (const type of ['grid', 'heart']) for (const count of (type === 'heart' ? HEART_PHOTO_COUNTS : PHOTO_COUNTS)) for (const gap of [...Array.from({length:81},(_,i)=>i/1000), 'narrow', 'normal', 'wide']) for (const printSize of ['A5', 'A4', 'A3', 'A2', '5x7', '8x10', 'custom']) for (const mat of ['minimal', 'normal', 'wide']) for (const orientation of ['portrait', 'landscape']) {
@@ -145,4 +145,17 @@ test('shadow intensity is bounded and spacing never erases tiny heart tiles',()=
   assert.ok(effectiveGapRatio(config)<=maxGapRatio(config))
   const page=paper(config)
   for(const s of slotsFor(config,page.width,page.height)) assert.ok(s.width>0 && s.height>0)
+})
+
+test('polaroid cards and square photo windows stay inside slots with deeper bottom margins',()=>{
+  for(const type of ['grid','heart']) for(const count of type==='grid'?PHOTO_COUNTS:HEART_PHOTO_COUNTS) for(const orientation of ['portrait','landscape']) {
+    const config={...base,layout:getLayoutPreset(type,count),gap:.08,printSize:'A4',orientation,photoStyle:'polaroid'}
+    const page=paper(config)
+    for(const slot of slotsFor(config,page.width,page.height)) {
+      const card=cardRect(config,slot),photo=photoRect(config,slot)
+      assert.ok(card.x>=slot.x-1e-6 && card.y>=slot.y-1e-6 && card.x+card.width<=slot.x+slot.width+1e-6 && card.y+card.height<=slot.y+slot.height+1e-6)
+      assert.ok(Math.abs(photo.width-photo.height)<1e-6)
+      assert.ok(card.y+card.height-photo.y-photo.height>photo.y-card.y)
+    }
+  }
 })

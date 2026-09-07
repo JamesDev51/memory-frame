@@ -28,7 +28,7 @@ export default function PhotoAdjuster({ config, aspectRatio, photo, index, total
       const canvas = canvasRef.current
       canvas.width = 700; canvas.height = Math.round(700 / aspectRatio)
       const ctx = canvas.getContext('2d')!
-      drawPhoto(ctx, image, photo, { x: 0, y: 0, width: canvas.width, height: canvas.height }, { ...config, shadow: 'off' })
+      drawPhoto(ctx, image, photo, { x: 0, y: 0, width: canvas.width, height: canvas.height }, { ...config, shadow: 'off', photoStyle: 'plain' })
     }).catch(() => {})
     return () => { active = false }
   }, [photo, config, aspectRatio])

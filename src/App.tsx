@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useEditorHistory } from './hooks/useEditorHistory'
-import { paper, slotsFor, photoDpis, effectiveGapRatio, maxGapRatio, shadowStrength } from './utils/geometry'
+import { paper, slotsFor, photoDpis, effectiveGapRatio, maxGapRatio, shadowStrength, photoRect } from './utils/geometry'
 import ScenePreview from './components/ScenePreview'
 import PhotoLibrary from './components/PhotoLibrary'
 import FramePreview, { type FrameFinish } from './components/FramePreview'
@@ -85,7 +85,6 @@ export default function App() {
   const previewRef = useRef<HTMLDivElement>(null)
   const [pendingExport, setPendingExport] = useState<'png' | 'pdf' | null>(null)
   const [selectedPhotoId, setSelectedPhotoId] = useState<string | null>(null)
-  const [advancedOpen, setAdvancedOpen] = useState(false)
   const [saveOpen, setSaveOpen] = useState(false)
   const [exportDpi, setExportDpi] = useState(300)
   const [exportError, setExportError] = useState<string | null>(null)
@@ -295,7 +294,6 @@ export default function App() {
     if (!ok) return
     history.reset()
     setSelectedPhotoId(null)
-    setAdvancedOpen(false)
     setSaveOpen(false)
     setExportError(null)
     setExportDpi(300)
@@ -322,7 +320,7 @@ export default function App() {
             <h1><span className="headline-line">사진만 고르면,</span><span className="headline-line"><span className="headline-phrase">예쁜 한 장이</span>{' '}<span className="headline-phrase">완성돼요.</span></span></h1>
             <p>복잡한 디자인은 필요 없어요. 모양과 프레임만 고르고 사진을 넣으면 끝.</p>
             <button type="button" className="primary-button hero-cta" onClick={() => setStep('layout')}>무료로 만들기</button>
-            <div className="privacy-note"><span>✓</span> 사진은 서버에 업로드되지 않아요</div>
+            <div className="privacy-note"><span>✓</span> 사진은 기기 안에서만 처리돼요</div>
           </div>
 
           <div className="hero-visual" aria-hidden="true">
@@ -429,7 +427,7 @@ export default function App() {
         <PhotoAdjuster
           key={selectedPhoto.id}
           config={config}
-          aspectRatio={(() => { const page = paper(config); const slot = slotsFor(config, page.width, page.height)[selectedIndex]; return slot ? slot.width / slot.height : 1 })()}
+          aspectRatio={(() => { const page = paper(config); const slot = slotsFor(config, page.width, page.height)[selectedIndex]; return slot ? photoRect(config, slot).width / photoRect(config, slot).height : 1 })()}
           photo={selectedPhoto}
           index={selectedIndex}
           total={placements.length}
@@ -458,14 +456,38 @@ export default function App() {
           </div>
 
           <aside className="control-panel">
-            <ScenePreview config={config} photos={arranged} />
-            <section className="control-section">
-              <div className="control-title"><strong>포토테이블 액자용</strong></div>
-              <p className="print-note">흰 배경 · 인쇄 그림자 없음 · 좁은 간격 · 액자 안전 여백</p>
-              <button type="button" className="soft-button full" onClick={() => { closePhoto(); setConfig(c => ({ ...c, frameId: 'white', frameVariantId: 'white', shadow: 'off', gap: 'narrow', mat: 'minimal', printUse: 'frame' })) }}>추천 스타일 적용</button>
+            <section className="control-section layout-controls"><div className="control-title"><strong>1. 배치와 사진 개수</strong></div>
+                <div className="advanced-body">
+                  <span className="mini-label">사진 개수</span>
+                  <div className="tiny-counts">
+                    {(config.layout.type === 'heart' ? HEART_PHOTO_COUNTS : PHOTO_COUNTS).map((count) => (
+                      <button
+                        type="button"
+                        key={count}
+                        className={config.layout.photoCount === count ? 'selected' : ''}
+                        onClick={() => changePhotoCount(count)}
+                      >{count}</button>
+                    ))}
+                  </div>
+                  {config.layout.type === 'grid' && config.layout.rows !== config.layout.columns && (
+                    <button type="button" className="soft-button full" onClick={swapOrientation}>↔ 가로 · 세로 바꾸기</button>
+                  )}
+                  <div className="layout-switch-row">
+                    <span className="mini-label">모양</span>
+                    <div className="segmented">
+                      <button type="button" className={config.layout.type === 'grid' ? 'selected' : ''} onClick={() => setConfig((current) => ({ ...current, layout: getLayoutPreset('grid', current.layout.photoCount) }))}>그리드</button>
+                      <button type="button" className={config.layout.type === 'heart' ? 'selected' : ''} onClick={() => { const count = Math.max(4, config.layout.photoCount); history.beginGroup(); setPlacements(resizePlacements(placements, count)); setConfig(c => ({ ...c, layout: getLayoutPreset('heart', count) })); history.endGroup(); closePhoto() }}>하트</button>
+                    </div>
+                  </div>
+                </div>
+            </section>
+
+            <section className="control-section"><div className="control-title"><strong>2. 사진 스타일</strong></div>
+              <div className="segmented"><button type="button" aria-pressed={config.photoStyle !== 'polaroid'} className={config.photoStyle !== 'polaroid' ? 'selected' : ''} onClick={() => setConfig(c => ({ ...c, photoStyle: 'plain' }))}>기본 사진</button><button type="button" aria-pressed={config.photoStyle === 'polaroid'} className={config.photoStyle === 'polaroid' ? 'selected' : ''} onClick={() => setConfig(c => ({ ...c, photoStyle: 'polaroid' }))}>폴라로이드</button></div>
+              <p className="print-note">폴라로이드는 흰 테두리와 넓은 아래 여백을 더해요.</p>
             </section>
             <section className="control-section">
-              <div className="control-title"><strong>종이 배경</strong><span>인쇄되는 색상과 무늬</span></div>
+              <div className="control-title"><strong>3. 종이 배경</strong><span>인쇄되는 색상과 무늬</span></div>
               <div className="frame-row">
                 {framePresets.map((frame) => {
                   const variant = frame.variants[0]
@@ -514,7 +536,7 @@ export default function App() {
 
             <section className="control-section inline-controls">
               <div className="control-block">
-                <div className="control-title"><strong>사진 간격</strong></div>
+                <div className="control-title"><strong>4. 간격과 그림자</strong></div>
                 <label className="gap-slider">
                   <span>간격 <output>{(effectiveGapRatio(config) * Math.min(paper(config).widthMm, paper(config).heightMm)).toFixed(1)} mm</output></span>
                   <input aria-label="사진 간격" type="range" min="0" max={Math.floor(maxGapRatio(config) * 1000)} step="1" value={Math.round(effectiveGapRatio(config) * 1000)} onPointerDown={() => history.beginGroup()} onPointerUp={() => history.endGroup()} onPointerCancel={() => history.endGroup()} onBlur={() => history.endGroup()} onChange={event => setConfig(c => ({ ...c, gap: Number(event.target.value) / 1000 }))} />
@@ -525,42 +547,14 @@ export default function App() {
               <label className="gap-slider">
                 <span>인쇄 그림자 <output>{Math.round(shadowStrength(config.shadow) * 100)}%</output></span>
                 <input aria-label="그림자 강도" type="range" min="0" max="100" step="1" value={Math.round(shadowStrength(config.shadow)*100)} onPointerDown={() => history.beginGroup()} onPointerUp={() => history.endGroup()} onPointerCancel={() => history.endGroup()} onBlur={() => history.endGroup()} onChange={event => setConfig(c => ({ ...c, shadow: Number(event.target.value) }))} />
-                <span className="print-note">0%는 그림자 없음 · 인쇄 파일에도 적용돼요.</span>
+                <span className="print-note">미리보기와 인쇄에 함께 적용돼요. 간격이 0이면 그림자가 가려질 수 있어요. 빈칸의 종이와 그림자는 확인용이에요.</span>
               </label>
             </section>
 
-            <section className="advanced-section">
-              <button type="button" className="advanced-toggle" onClick={() => setAdvancedOpen((open) => !open)}>
-                <span>배치 조금 더 바꾸기</span><span>{advancedOpen ? '−' : '+'}</span>
-              </button>
-              {advancedOpen && (
-                <div className="advanced-body">
-                  <span className="mini-label">사진 개수</span>
-                  <div className="tiny-counts">
-                    {(config.layout.type === 'heart' ? HEART_PHOTO_COUNTS : PHOTO_COUNTS).map((count) => (
-                      <button
-                        type="button"
-                        key={count}
-                        className={config.layout.photoCount === count ? 'selected' : ''}
-                        onClick={() => changePhotoCount(count)}
-                      >{count}</button>
-                    ))}
-                  </div>
-                  {config.layout.type === 'grid' && config.layout.rows !== config.layout.columns && (
-                    <button type="button" className="soft-button full" onClick={swapOrientation}>↔ 가로 · 세로 바꾸기</button>
-                  )}
-                  <div className="layout-switch-row">
-                    <span className="mini-label">모양</span>
-                    <div className="segmented">
-                      <button type="button" className={config.layout.type === 'grid' ? 'selected' : ''} onClick={() => setConfig((current) => ({ ...current, layout: getLayoutPreset('grid', current.layout.photoCount) }))}>그리드</button>
-                      <button type="button" className={config.layout.type === 'heart' ? 'selected' : ''} onClick={() => { const count = Math.max(4, config.layout.photoCount); history.beginGroup(); setPlacements(resizePlacements(placements, count)); setConfig(c => ({ ...c, layout: getLayoutPreset('heart', count) })); history.endGroup(); closePhoto() }}>하트</button>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </section>
 
-            <section className="control-section"><div className="control-title"><strong>액자 · 인쇄</strong></div><p className="print-note">{config.printSize === 'custom' ? '맞춤 크기' : config.printSize} · {paper(config).widthMm} × {paper(config).heightMm} mm<br />{config.printUse === 'frame' ? `액자 가림 여유 ${config.frameOverlapMm}mm 적용` : '종이 포스터용'}</p><button type="button" className="soft-button full" onClick={() => setSaveOpen(true)}>종이 크기와 여백 설정</button></section>
+            <section className="control-section"><div className="control-title"><strong>5. 액자 · 인쇄</strong></div><p className="print-note">{config.printSize === 'custom' ? '맞춤 크기' : config.printSize} · {paper(config).widthMm} × {paper(config).heightMm} mm<br />{config.printUse === 'frame' ? `액자 가림 여유 ${config.frameOverlapMm}mm 적용` : '종이 포스터용'}</p><button type="button" className="soft-button full" onClick={() => setSaveOpen(true)}>종이 크기와 여백 설정</button></section>
+
+            <ScenePreview config={config} photos={arranged} />
 
             <button type="button" className="primary-button save-main" onClick={() => setSaveOpen(true)}>완성했어요 · 저장하기</button>
             <button type="button" className="reset-link" onClick={resetAll}>처음부터 다시 만들기</button>

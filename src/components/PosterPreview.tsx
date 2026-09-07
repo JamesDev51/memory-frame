@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useRef, useState } from 'react'
-import { paper, slotsFor } from '../utils/geometry'
+import { paper, slotsFor, cardRect } from '../utils/geometry'
 import { renderToCanvas } from '../utils/render'
 import type { EditorConfig, PhotoItem } from '../types/editor'
 interface Props {
@@ -17,7 +17,7 @@ export default function PosterPreview({ config, photos, selectedPhotoId, onSelec
   useEffect(() => {
     let cancelled = false
     setError(false)
-    void renderToCanvas(config, photos, width, height, () => cancelled).then(canvas => {
+    void renderToCanvas(config, photos, width, height, () => cancelled, interactive).then(canvas => {
       if (!cancelled && ref.current) {
         ref.current.width = canvas.width; ref.current.height = canvas.height
         ref.current.getContext('2d')?.drawImage(canvas, 0, 0)
@@ -25,11 +25,12 @@ export default function PosterPreview({ config, photos, selectedPhotoId, onSelec
       canvas.width = 0; canvas.height = 0
     }).catch(() => { if (!cancelled) setError(true) })
     return () => { cancelled = true }
-  }, [config, photos, width, height])
+  }, [config, photos, width, height, interactive])
   return <div className="poster canvas-poster" style={{ aspectRatio: `${page.widthMm} / ${page.heightMm}` }} aria-label="완성본 미리보기">
     <canvas ref={ref} aria-label="인쇄 미리보기 이미지" />
     {error && <span className="preview-error" role="alert">미리보기를 불러오지 못했어요. 사진을 다시 선택해주세요.</span>}
-    {interactive && slots.map((slot, i) => {
+    {interactive && slots.map((rawSlot, i) => {
+      const slot = cardRect(config, rawSlot)
       const photo = photos[i]
       return <Fragment key={i}><button type="button"
         className={`tile-hit ${photo ? '' : 'empty-photo'} ${photo?.id === selectedPhotoId ? 'selected-photo' : ''} ${placementId ? 'placement-target' : ''} ${dropIndex === i || targetIndex === i ? 'drop-target' : ''}`}

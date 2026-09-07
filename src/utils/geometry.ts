@@ -57,6 +57,17 @@ export function slotsFor(config: EditorConfig, width: number, height: number): R
     y: margin + Math.floor(i / columns) * (cellH + gap), width: cellW, height: cellH,
   }))
 }
+export function cardRect(config: EditorConfig, slot: Rect): Rect {
+  if (config.photoStyle !== 'polaroid') return slot
+  const width = Math.min(slot.width, slot.height / 1.22), height = width * 1.22
+  return {x: slot.x + (slot.width-width)/2, y: slot.y + (slot.height-height)/2, width, height}
+}
+export function photoRect(config: EditorConfig, slot: Rect): Rect {
+  const card = cardRect(config, slot)
+  if (config.photoStyle !== 'polaroid') return card
+  const inset = card.width * .06, side = card.width * .88
+  return {x:card.x+inset,y:card.y+inset,width:side,height:side}
+}
 export function photoPlacement(photo: PhotoItem, width: number, height: number) {
   const contain = photo.fit === 'contain'
   const base = (contain ? Math.min : Math.max)(width / photo.naturalWidth, height / photo.naturalHeight)
@@ -69,5 +80,5 @@ export function photoPlacement(photo: PhotoItem, width: number, height: number) 
 export function photoDpis(config: EditorConfig, photos: (PhotoItem | null)[]) {
   const page = paper(config)
   const slots = slotsFor(config, page.width, page.height)
-  return photos.map((photo, i) => photo && slots[i] ? Math.floor(300 / photoPlacement(photo, slots[i].width, slots[i].height).scale) : null)
+  return photos.map((photo, i) => photo && slots[i] ? Math.floor(300 / photoPlacement(photo, photoRect(config, slots[i]).width, photoRect(config, slots[i]).height).scale) : null)
 }

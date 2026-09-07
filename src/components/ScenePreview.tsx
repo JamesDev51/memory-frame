@@ -31,7 +31,7 @@ export default function ScenePreview({config, photos}: {config: EditorConfig; ph
   const page = paper(config)
   const objectWidth = Math.min(44, 52 / 1.5 * page.widthMm / page.heightMm)
   return <section className="control-section">
-    <div className="control-title"><strong>공간에서 미리보기</strong></div>
+    <div className="control-title"><strong>6. 공간 미리보기</strong></div>
     <p className="print-note">포토테이블과 벽에 놓인 모습을 확인해보세요.</p>
     <button type="button" className="soft-button full" disabled={!photos.some(Boolean)} onClick={() => setOpen(true)}>공간 미리보기 열기</button>
     {open && <div className="sheet-backdrop scene-backdrop" onMouseDown={e => e.target === e.currentTarget && setOpen(false)}>
