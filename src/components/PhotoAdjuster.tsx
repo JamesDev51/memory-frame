@@ -59,13 +59,13 @@ export default function PhotoAdjuster({ config, aspectRatio, photo, index, total
   }
 
   return (
-    <div className="sheet-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
-      <section className="bottom-sheet photo-adjuster" role="dialog" aria-modal="true" aria-label="사진 위치 조정">
-        <div className="sheet-grabber" />
+    <div className="inline-photo-editor" id="photo-editor">
+      <section className="photo-adjuster" role="region" aria-label="사진 위치 조정">
+
         <div className="sheet-title-row">
           <div>
             <p className="sheet-kicker">{index >= 0 ? `${index + 1}번 칸 · ${total}칸` : '미배치 사진'}</p>
-            <h2>사진 위치를 맞춰주세요</h2>
+            <h2>전체 배치를 보면서 조정하세요</h2>
           </div>
           <button className="icon-button" type="button" onClick={onClose} aria-label="닫기">×</button>
         </div>

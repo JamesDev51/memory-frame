@@ -22,14 +22,14 @@ export default function PhotoLibrary({ photos, placements, selectedId, onAdd, on
     <div className="library-strip" tabIndex={0} aria-label="추가된 사진 목록">
       {!shown.length && <p className="library-empty">{photos.length ? '모든 사진이 배치됐어요. 다른 사진도 더 추가할 수 있어요.' : '사진을 여러 장 선택해 추가해주세요.'}</p>}
       {shown.map(photo => {
-        const slot = placements.indexOf(photo.id), label = photo.file.name
+        const slot = placements.indexOf(photo.id), label = `사진 ${photos.indexOf(photo) + 1}`
         return <article key={photo.id} className={`library-photo ${selectedId === photo.id ? 'active' : ''}`}>
           <button type="button" className="library-thumb" aria-label={`${label} 배치하기`} aria-pressed={selectedId === photo.id} onClick={() => onSelect(photo.id)} draggable
             onDragStart={event => { event.dataTransfer.setData('application/x-memory-frame-photo', photo.id); event.dataTransfer.effectAllowed = 'move' }}>
             <img src={photo.url} alt={label} draggable={false} loading="lazy" />
             <span>{slot >= 0 ? `${slot + 1}번 칸` : '미배치'}</span>
           </button>
-          <p title={label}>{label}</p>
+
           <div className="library-photo-actions"><button type="button" aria-label={`${label} 편집`} onClick={() => onEdit(photo.id)}>편집</button><button type="button" aria-label={`${label} 보관함에서 삭제`} onClick={() => onRemove(photo.id)}>삭제</button></div>
         </article>
       })}

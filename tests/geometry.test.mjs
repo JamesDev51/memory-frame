@@ -9,11 +9,11 @@ const root = await fs.mkdtemp(path.join(os.tmpdir(), 'memory-frame-test-'))
 execFileSync('node_modules/.bin/tsc', ['src/utils/geometry.ts', 'src/utils/history.ts', 'src/utils/placements.ts', '--ignoreConfig', '--target', 'es2022', '--module', 'esnext', '--moduleResolution', 'bundler', '--skipLibCheck', '--outDir', root])
 const geometryPath = path.join(root, 'utils/geometry.js')
 await fs.writeFile(geometryPath, (await fs.readFile(geometryPath, 'utf8')).replace("'../presets/layouts'", "'../presets/layouts.js'"))
-const { getLayoutPreset, PHOTO_COUNTS } = await import(pathToFileURL(path.join(root, 'presets/layouts.js')))
+const { getLayoutPreset, PHOTO_COUNTS, HEART_PHOTO_COUNTS } = await import(pathToFileURL(path.join(root, 'presets/layouts.js')))
 const { slotsFor, paper, photoPlacement, photoDpis, safeMarginMm } = await import(pathToFileURL(path.join(root, 'utils/geometry.js')))
 const base = { frameId: 'white', frameVariantId: 'white', shadow: 'off', colorMode: 'color' }
-test('all 1512 combinations have exact count, non-overlapping tiles within the page', () => {
-  for (const type of ['grid', 'heart']) for (const count of PHOTO_COUNTS) for (const gap of ['narrow', 'normal', 'wide']) for (const printSize of ['A5', 'A4', 'A3', 'A2', '5x7', '8x10', 'custom']) for (const mat of ['minimal', 'normal', 'wide']) for (const orientation of ['portrait', 'landscape']) {
+test('all supported combinations have exact count, non-overlapping tiles within the page', () => {
+  for (const type of ['grid', 'heart']) for (const count of (type === 'heart' ? HEART_PHOTO_COUNTS : PHOTO_COUNTS)) for (const gap of ['narrow', 'normal', 'wide']) for (const printSize of ['A5', 'A4', 'A3', 'A2', '5x7', '8x10', 'custom']) for (const mat of ['minimal', 'normal', 'wide']) for (const orientation of ['portrait', 'landscape']) {
     const config = { ...base, layout: getLayoutPreset(type, count), gap, printSize, orientation, mat, printUse: 'frame', frameOverlapMm: 8, customWidthMm: 80, customHeightMm: 600 }
     const page = paper(config), slots = slotsFor(config, page.width, page.height)
     assert.equal(slots.length, count)
@@ -121,7 +121,7 @@ test('grid fills all four edges with equal margins and identical horizontal/vert
     const near=(a,b)=>assert.ok(Math.abs(a-b)<1e-6,`${a} != ${b}`)
     near(first.x,margin);near(first.y,margin)
     near(page.width-last.x-last.width,margin);near(page.height-last.y-last.height,margin)
-    near(slots[1].x-first.x-first.width,slots[layout.columns].y-first.y-first.height)
+    if(layout.columns>1 && layout.rows>1) near(slots[1].x-first.x-first.width,slots[layout.columns].y-first.y-first.height)
     const preview=slotsFor(config,900,900*page.height/page.width)
     for(let i=0;i<slots.length;i++) for(const key of ['x','y','width','height']) near(preview[i][key]/900,slots[i][key]/page.width)
   }

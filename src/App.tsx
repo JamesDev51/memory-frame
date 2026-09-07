@@ -7,18 +7,18 @@ import { arrangedPhotos, fillEmpty, placePhoto, resizePlacements } from './utils
 import PosterPreview from './components/PosterPreview'
 import PhotoAdjuster from './components/PhotoAdjuster'
 import { framePresets, getFramePreset } from './presets/frames'
-import { getHeartSlots, getLayoutPreset, PHOTO_COUNTS } from './presets/layouts'
+import { getHeartSlots, getLayoutPreset, PHOTO_COUNTS, HEART_PHOTO_COUNTS } from './presets/layouts'
 import type { EditorConfig, LayoutType, PhotoItem } from './types/editor'
 import { exportPdf, exportPng, PRINT_SIZES, type PrintSize } from './utils/render'
 
 type Step = 'home' | 'layout' | 'count' | 'upload' | 'editor'
 
 const initialConfig: EditorConfig = {
-  layout: getLayoutPreset('grid', 9),
+  layout: getLayoutPreset('grid', 4),
   gap: 'narrow',
   frameId: 'white',
   frameVariantId: 'white',
-  shadow: 'on',
+  shadow: 'off',
   printSize: 'A4',
   orientation: 'portrait',
   colorMode: 'color',
@@ -103,7 +103,7 @@ export default function App() {
   }, [toast])
 
   useEffect(() => {
-    if (!selectedPhotoId && !saveOpen) return
+    if (!saveOpen) return
     const previous = document.activeElement as HTMLElement | null
     const dialog = document.querySelector<HTMLElement>('[role="dialog"]')
     const focusable = () => Array.from(dialog?.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled):not([hidden]), select, summary, [tabindex="0"]') ?? []).filter(el => el.getClientRects().length)
@@ -114,8 +114,7 @@ export default function App() {
       if (document.querySelector('.busy-overlay')) return
       if (event.key === 'Escape') {
         event.preventDefault()
-        if (selectedPhotoId) { history.endGroup(); setSelectedPhotoId(null) }
-        else setSaveOpen(false)
+        setSaveOpen(false)
       }
       if (event.key === 'Tab') {
         const items = focusable(), first = items[0], last = items[items.length - 1]
@@ -125,7 +124,7 @@ export default function App() {
     }
     document.addEventListener('keydown', keydown)
     return () => { document.body.style.overflow = overflow; document.removeEventListener('keydown', keydown); previous?.focus() }
-  }, [!!selectedPhotoId, saveOpen])
+  }, [saveOpen])
 
   const selectedPhoto = useMemo(
     () => photos.find((photo) => photo.id === selectedPhotoId) ?? null,
@@ -135,7 +134,7 @@ export default function App() {
   const currentFrame = getFramePreset(config.frameId)
 
   function chooseLayout(type: LayoutType) {
-    const count = type === 'heart' ? 12 : 9
+    const count = type === 'heart' ? 12 : 4
     history.beginGroup()
     setConfig((current) => ({ ...current, layout: getLayoutPreset(type, count), mat: type === 'grid' ? 'minimal' : 'normal', gap: type === 'grid' ? 'narrow' : 'normal' }))
     setPlacements(resizePlacements(placements, count))
@@ -219,6 +218,7 @@ export default function App() {
     document.getElementById('photo-library')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
   }
   function removeFromLibrary(id: string) {
+    if (id === selectedPhotoId) setSelectedPhotoId(null)
     history.beginGroup()
     setPlacements(current => current.map(value => value === id ? null : value))
     setPhotos(current => current.filter(photo => photo.id !== id))
@@ -268,7 +268,7 @@ export default function App() {
     setConfig((current) => ({ ...current, frameId, frameVariantId: frame.variants[0].id }))
   }
 
-  function openPhoto(id: string) { setPlacementId(null); setTargetIndex(null); history.beginGroup(); setSelectedPhotoId(id) }
+  function openPhoto(id: string) { history.endGroup(); setPlacementId(null); setTargetIndex(null); history.beginGroup(); setSelectedPhotoId(id); previewRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }) }
   function closePhoto() { history.endGroup(); setSelectedPhotoId(null) }
 
   async function handleExport(format: 'png' | 'pdf', allowEmpty = false) {
@@ -375,10 +375,11 @@ export default function App() {
             <div className="flow-content compact-flow">
               <p className="step-label">2 / 3</p>
               <h2>사진을 몇 장 넣을까요?</h2>
-              <p className="step-desc">자주 쓰는 개수만 준비했어요.</p>
+              <p className="step-desc">작은 액자일수록 사진을 적게 넣으면 얼굴이 잘 보여요.</p>
+              <p className="print-note">그리드 추천 · A5 1~4장 / A4 4~6장 / A3 6~12장</p>
               {config.layout.type === 'heart' && <p className="print-note">12장 이상을 추천해요. 4·6장은 단순한 하트 배치예요.</p>}
               <div className="count-grid">
-                {PHOTO_COUNTS.map((count) => {
+                {(config.layout.type === 'heart' ? HEART_PHOTO_COUNTS : PHOTO_COUNTS).map((count) => {
                   const preset = getLayoutPreset(config.layout.type, count)
                   return (
                     <button key={count} type="button" className="count-button" onClick={() => chooseCount(count)}>
@@ -423,7 +424,7 @@ export default function App() {
       )}
 
       {step === 'editor' && (
-        <section className="editor-screen">
+        <section className={`editor-screen ${selectedPhoto ? 'editing-photo' : ''}`} onPointerDownCapture={event => { if (!(event.target as HTMLElement).closest('.photo-adjuster')) history.endGroup() }} onFocusCapture={event => { if (!(event.target as HTMLElement).closest('.photo-adjuster')) history.endGroup() }}>
           <div className="preview-column">
             <div className="editor-heading">
               <div><p className="step-label">미리보기</p><h2>이미 거의 다 됐어요.</h2></div>
@@ -448,6 +449,23 @@ export default function App() {
               />
               </FramePreview>
             </div>
+      {selectedPhoto && (
+        <PhotoAdjuster
+          key={selectedPhoto.id}
+          config={config}
+          aspectRatio={(() => { const page = paper(config); const slot = slotsFor(config, page.width, page.height)[selectedIndex]; return slot ? slot.width / slot.height : 1 })()}
+          photo={selectedPhoto}
+          index={selectedIndex}
+          total={placements.length}
+          onChange={patchSelectedPhoto}
+          onReplace={(file) => void replaceSelectedPhoto(file)}
+          onDelete={deleteSelectedPhoto}
+          onUnplace={selectedIndex >= 0 ? unplaceSelected : undefined}
+          onMove={moveSelected}
+          onClose={closePhoto}
+        />
+      )}
+
             <p className="preview-help">{frameFinish === 'paper' ? '사진을 눌러 편집하거나 끌어서 자리를 바꾸세요.' : '액자 외형은 미리보기예요. 저장 파일에는 인쇄할 종이만 담겨요.'}</p>
             <div className="history-controls">
               <button type="button" className="soft-button" disabled={!history.canUndo} onClick={() => { history.undo(); setPlacementId(null); setTargetIndex(null) }}>↶ 실행 취소</button>
@@ -460,6 +478,11 @@ export default function App() {
           </div>
 
           <aside className="control-panel">
+            <section className="control-section">
+              <div className="control-title"><strong>포토테이블 액자용</strong></div>
+              <p className="print-note">흰 배경 · 인쇄 그림자 없음 · 좁은 간격 · 액자 안전 여백</p>
+              <button type="button" className="soft-button full" onClick={() => { closePhoto(); setConfig(c => ({ ...c, frameId: 'white', frameVariantId: 'white', shadow: 'off', gap: 'narrow', mat: 'minimal', printUse: 'frame' })) }}>추천 스타일 적용</button>
+            </section>
             <section className="control-section">
               <div className="control-title"><strong>종이 배경</strong><span>인쇄되는 색상과 무늬</span></div>
               <div className="frame-row">
@@ -544,7 +567,7 @@ export default function App() {
                 <div className="advanced-body">
                   <span className="mini-label">사진 개수</span>
                   <div className="tiny-counts">
-                    {PHOTO_COUNTS.map((count) => (
+                    {(config.layout.type === 'heart' ? HEART_PHOTO_COUNTS : PHOTO_COUNTS).map((count) => (
                       <button
                         type="button"
                         key={count}
@@ -560,7 +583,7 @@ export default function App() {
                     <span className="mini-label">모양</span>
                     <div className="segmented">
                       <button type="button" className={config.layout.type === 'grid' ? 'selected' : ''} onClick={() => setConfig((current) => ({ ...current, layout: getLayoutPreset('grid', current.layout.photoCount) }))}>그리드</button>
-                      <button type="button" className={config.layout.type === 'heart' ? 'selected' : ''} onClick={() => setConfig((current) => ({ ...current, layout: getLayoutPreset('heart', current.layout.photoCount) }))}>하트</button>
+                      <button type="button" className={config.layout.type === 'heart' ? 'selected' : ''} onClick={() => { const count = Math.max(4, config.layout.photoCount); history.beginGroup(); setPlacements(resizePlacements(placements, count)); setConfig(c => ({ ...c, layout: getLayoutPreset('heart', count) })); history.endGroup(); closePhoto() }}>하트</button>
                     </div>
                   </div>
                 </div>
@@ -587,21 +610,6 @@ export default function App() {
         </section>
       )}
 
-      {selectedPhoto && (
-        <PhotoAdjuster
-          config={config}
-          aspectRatio={(() => { const page = paper(config); const slot = slotsFor(config, page.width, page.height)[selectedIndex]; return slot ? slot.width / slot.height : 1 })()}
-          photo={selectedPhoto}
-          index={selectedIndex}
-          total={placements.length}
-          onChange={patchSelectedPhoto}
-          onReplace={(file) => void replaceSelectedPhoto(file)}
-          onDelete={deleteSelectedPhoto}
-          onUnplace={selectedIndex >= 0 ? unplaceSelected : undefined}
-          onMove={moveSelected}
-          onClose={closePhoto}
-        />
-      )}
 
       {saveOpen && (
         <div className="sheet-backdrop" onMouseDown={event => event.target === event.currentTarget && setSaveOpen(false)}>
@@ -616,6 +624,7 @@ export default function App() {
               </div>
               <div className="print-controls">
                 <strong>용지 크기</strong>
+                <p className="print-note">그리드 추천 · A5 1~4장 / A4 4~6장 / A3 6~12장. 실제 사진과 감상 거리에 맞춰 골라주세요.</p>
                 <div className="paper-options">
                   {(Object.entries(PRINT_SIZES) as [PrintSize, (typeof PRINT_SIZES)[PrintSize]][]).map(([size, spec]) => (
                     <button type="button" key={size} className={`soft-button ${config.printSize === size ? 'chosen' : ''}`} aria-pressed={config.printSize === size} onClick={() => setConfig(c => ({ ...c, printSize: size }))}>

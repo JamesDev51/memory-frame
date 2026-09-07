@@ -399,3 +399,25 @@ h1, h2, h3, p, button, label, summary { word-break: keep-all; overflow-wrap: bre
   .editor-screen { padding-top: 16px; }
   .preview-help { font-size: 13px; line-height: 1.6; padding: 0 10px; }
 }
+
+/* Photo-table editing: retain the poster while editing, with no modal scrim. */
+.library-strip { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); max-height: 460px; overflow-y: auto; overflow-x: hidden; }
+.library-thumb { height: auto; aspect-ratio: 1; }
+.library-photo { background: #f5f0ea; border-color: #e7ded5; }
+.library-photo-actions { margin-top: 8px; }
+.library-photo-actions button { min-height: 42px; }
+.library-empty { grid-column: 1 / -1; }
+.inline-photo-editor { margin: 16px 0; padding: 18px; border: 1px solid #d9c9bb; border-radius: 16px; background: #fffdfb; }
+.photo-adjuster { width: 100%; }
+.photo-adjuster .sheet-title-row h2 { font-size: 20px; }
+.photo-adjuster .adjuster-canvas { max-width: min(100%, 150px); max-height: 220px; }
+.editing-photo .preview-stage { position: sticky; top: 8px; z-index: 15; background: #eee7de; padding: 12px; }
+.editing-photo .preview-stage .frame-proof { max-width: 210px; }
+@media (max-width: 700px) {
+  .library-strip { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+  .library-photo { padding: 3px; }
+  .library-photo-actions { gap: 2px; }
+  .editing-photo .preview-stage .frame-proof { max-width: min(160px, 22vh); }
+  .photo-adjuster .adjuster-canvas { max-width: 110px; }
+  .inline-photo-editor { padding: 12px; }
+}

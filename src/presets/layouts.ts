@@ -1,6 +1,8 @@
 import type { LayoutPreset, LayoutType } from '../types/editor'
 
 const gridShapes: Record<number, [number, number]> = {
+  1: [1, 1],
+  2: [2, 1],
   4: [2, 2],
   6: [3, 2],
   9: [3, 3],
@@ -9,7 +11,8 @@ const gridShapes: Record<number, [number, number]> = {
   20: [5, 4],
 }
 
-export const PHOTO_COUNTS = [4, 6, 9, 12, 16, 20]
+export const PHOTO_COUNTS = [1, 2, 4, 6, 9, 12, 16, 20]
+export const HEART_PHOTO_COUNTS = [4, 6, 9, 12, 16, 20]
 
 export interface HeartSlot {
   x: number
@@ -61,5 +64,5 @@ export function getLayoutPreset(type: LayoutType, photoCount: number): LayoutPre
 
 export const layoutOptions = {
   grid: PHOTO_COUNTS.map((count) => getLayoutPreset('grid', count)),
-  heart: PHOTO_COUNTS.map((count) => getLayoutPreset('heart', count)),
+  heart: HEART_PHOTO_COUNTS.map((count) => getLayoutPreset('heart', count)),
 }
