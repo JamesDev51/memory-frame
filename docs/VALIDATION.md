@@ -35,3 +35,10 @@ Implementation commit c9d4060c8b3cb7819fefb7d4cb7a45307f917ef7:
 - `npm run build`: pass.
 - Local preview starts healthy but cloud browser returns ERR_BLOCKED_BY_CLIENT for terminal.local:4173. Production browser verification follows deployment.
 - Physical printer and physical frame fit are not tested. Mobile device/desktop drag interaction status will be recorded separately from pure placement tests.
+
+### V1.3 deployment result
+
+- Source commit: `35b994bf2f8f91b530705b36acf43429454d383f`. GitHub Actions `build`: success. Vercel commit status: success / Deployment has completed.
+- Production browser navigation timed out, and one browser-runtime recovery also timed out. Therefore no claim is made that V1.3 desktop drag, mobile interaction, visual Heart appearance or custom-size downloaded files were verified in the live browser. These remain manual acceptance checks.
+- V1.2 production PDF/PNG results above are historical evidence, not V1.3 end-to-end results.
+- Production alias HTTP 200; HTML references `index-BKfiJD1q.js` and `index-C3Czh4o-.css`, matching the local V1.3 production build.
