@@ -27,3 +27,11 @@ Implementation commit c9d4060c8b3cb7819fefb7d4cb7a45307f917ef7:
 - During later undo/redo and empty-slot confirmation checks, the browser connection timed out/reset. These browser scenarios were not conclusively verified. Core history logic is covered by automated tests; this does not substitute for completed UI checks.
 - Physical mobile Chrome / iOS Safari, responsive device emulation, drag gestures, mixed-validity uploads and physical printer output remain unverified in this session. These limitations must not be described as passed.
 - Final follow-up only extracts unchanged history transformations into tested functions and updates documentation. It does not change poster rendering or export behavior.
+
+## V1.3 validation — 2026-09-07
+
+- `npm test`: 12 tests pass. 1,512 layout/count/gap/paper/mat/orientation combinations satisfy square tiles, no overlap and page bounds.
+- Placement tests: swap vs replace, unused-photo retention, automatic empty fill, count shrinking, null-slot preservation, bank+placement undo checkpoints.
+- `npm run build`: pass.
+- Local preview starts healthy but cloud browser returns ERR_BLOCKED_BY_CLIENT for terminal.local:4173. Production browser verification follows deployment.
+- Physical printer and physical frame fit are not tested. Mobile device/desktop drag interaction status will be recorded separately from pure placement tests.

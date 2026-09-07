@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useEditorHistory } from './hooks/useEditorHistory'
 import { paper, slotsFor, photoDpis } from './utils/geometry'
+import PhotoLibrary from './components/PhotoLibrary'
+import FramePreview, { type FrameFinish } from './components/FramePreview'
+import { arrangedPhotos, fillEmpty, placePhoto, resizePlacements } from './utils/placements'
 import PosterPreview from './components/PosterPreview'
 import PhotoAdjuster from './components/PhotoAdjuster'
 import { framePresets, getFramePreset } from './presets/frames'
@@ -19,6 +22,8 @@ const initialConfig: EditorConfig = {
   printSize: 'A4',
   orientation: 'portrait',
   colorMode: 'color',
+  customWidthMm: 210, customHeightMm: 297,
+  printUse: 'frame', mat: 'normal', frameOverlapMm: 5,
 }
 
 function loadDimensions(url: string): Promise<{ width: number; height: number }> {
@@ -70,7 +75,14 @@ function LayoutThumbnail({ type }: { type: LayoutType }) {
 export default function App() {
   const [step, setStep] = useState<Step>('home')
   const history = useEditorHistory(initialConfig)
-  const { config, photos, setConfig, setPhotos } = history
+  const { config, photos, placements, setConfig, setPhotos, setPlacements } = history
+  const arranged = useMemo(() => arrangedPhotos(placements, photos), [placements, photos])
+  const placedCount = arranged.filter(Boolean).length
+  const [placementId, setPlacementId] = useState<string | null>(null)
+  const [targetIndex, setTargetIndex] = useState<number | null>(null)
+  const [frameFinish, setFrameFinish] = useState<FrameFinish | 'paper'>('black')
+  const previewRef = useRef<HTMLDivElement>(null)
+  const [pendingExport, setPendingExport] = useState<'png' | 'pdf' | null>(null)
   const [selectedPhotoId, setSelectedPhotoId] = useState<string | null>(null)
   const [advancedOpen, setAdvancedOpen] = useState(false)
   const [saveOpen, setSaveOpen] = useState(false)
@@ -119,45 +131,48 @@ export default function App() {
     () => photos.find((photo) => photo.id === selectedPhotoId) ?? null,
     [photos, selectedPhotoId],
   )
-  const selectedIndex = selectedPhoto ? photos.findIndex((photo) => photo.id === selectedPhoto.id) : -1
+  const selectedIndex = selectedPhoto ? placements.indexOf(selectedPhoto.id) : -1
   const currentFrame = getFramePreset(config.frameId)
 
   function chooseLayout(type: LayoutType) {
     const count = type === 'heart' ? 12 : 9
+    history.beginGroup()
     setConfig((current) => ({ ...current, layout: getLayoutPreset(type, count) }))
+    setPlacements(resizePlacements(placements, count))
+    history.endGroup()
     setStep('count')
   }
 
   function chooseCount(count: number) {
+    setPlacements(resizePlacements(placements, count))
     setConfig((current) => ({ ...current, layout: getLayoutPreset(current.layout.type, count) }))
     setStep('upload')
   }
 
   async function readFiles(fileList: FileList | null, mode: 'replace-all' | 'append') {
     if (!fileList?.length) return
-    const capacity = config.layout.photoCount
-    const available = mode === 'append' ? Math.max(0, capacity - photos.length) : capacity
-    const files = Array.from(fileList).slice(0, available)
-    if (!files.length) {
-      setToast('이미 모든 칸이 채워졌어요.')
-      return
-    }
-
+    const files = Array.from(fileList)
     setBusy('사진을 준비하고 있어요')
     try {
-      const results = await Promise.allSettled(files.map((file) => fileToPhoto(file)))
-      const next = results.flatMap(result => result.status === 'fulfilled' ? [result.value] : [])
+      const next: PhotoItem[] = []
+      let failed = 0
+      // Decode in small batches so a large gallery selection does not decode all originals at once.
+      for (let i = 0; i < files.length; i += 4) {
+        const results = await Promise.allSettled(files.slice(i, i + 4).map(fileToPhoto))
+        results.forEach(result => { if (result.status === 'fulfilled') next.push(result.value); else failed++ })
+        setBusy(`사진을 준비하고 있어요 · ${Math.min(i + 4, files.length)} / ${files.length}`)
+      }
       if (!next.length) { setToast('사진을 불러오지 못했어요. JPG, PNG, WEBP 사진을 선택해주세요.'); return }
       next.forEach(photo => history.register(photo.url))
-      const failed = results.length - next.length
-      if (failed) setToast(`${next.length}장은 넣었어요. 읽지 못한 ${failed}장은 다른 형식으로 다시 선택해주세요.`)
-      else if (fileList.length > available) setToast(`${available}장을 넣었어요. 선택한 나머지 사진은 제외했어요.`)
-      if (mode === 'replace-all') {
-        setPhotos(next)
-        setStep('editor')
-      } else {
-        setPhotos((current) => [...current, ...next].slice(0, capacity))
-      }
+      const all = mode === 'replace-all' ? next : [...photos, ...next]
+      const empty = mode === 'replace-all' ? Array(config.layout.photoCount).fill(null) : placements
+      history.beginGroup()
+      setPhotos(all)
+      setPlacements(fillEmpty(empty, all))
+      history.endGroup()
+      setStep('editor')
+      setTargetIndex(null); setPlacementId(null)
+      setToast(failed ? `${next.length}장을 추가했어요. 읽지 못한 ${failed}장은 다른 형식으로 다시 선택해주세요.` : `${next.length}장을 추가했어요. 남은 사진은 사진관리에서 바꿔 넣을 수 있어요.`)
     } catch {
       setToast('일부 사진을 불러오지 못했어요. JPG, PNG, WEBP 사진을 사용해주세요.')
     } finally {
@@ -167,14 +182,12 @@ export default function App() {
 
   function changePhotoCount(count: number) {
     if (count === config.layout.photoCount) return
-    if (count < photos.length) {
-      const ok = window.confirm(`${count}장으로 바꾸면 뒤쪽 ${photos.length - count}장의 사진이 빠져요. 계속할까요?`)
-      if (!ok) return
-      history.beginGroup()
-      setPhotos((current) => current.slice(0, count))
-    }
-    setConfig((current) => ({ ...current, layout: getLayoutPreset(current.layout.type, count) }))
+    history.beginGroup()
+    setPlacements(resizePlacements(placements, count))
+    setConfig(current => ({ ...current, layout: getLayoutPreset(current.layout.type, count) }))
     history.endGroup()
+    setPlacementId(null); setTargetIndex(null)
+    if (count < config.layout.photoCount) setToast('줄어든 칸의 사진은 사진관리에 보관했어요.')
   }
 
   function swapOrientation() {
@@ -190,14 +203,33 @@ export default function App() {
     }))
   }
 
-  function movePhoto(from: number, to: number) {
-    setPhotos((current) => {
-      if (!current[from]) return current
-      const next = [...current]
-      const [item] = next.splice(from, 1)
-      next.splice(Math.min(to, next.length), 0, item)
-      return next
-    })
+  function assignPhoto(id: string, index: number) {
+    if (!photos.some(photo => photo.id === id)) return
+    setPlacements(current => placePhoto(current, id, index))
+    setPlacementId(null); setTargetIndex(null)
+    setToast(`${index + 1}번 칸에 배치했어요.`)
+  }
+  function selectForPlacement(id: string) {
+    if (targetIndex !== null) { assignPhoto(id, targetIndex); return }
+    setPlacementId(current => current === id ? null : id)
+    previewRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }
+  function chooseEmptySlot(index: number) {
+    setTargetIndex(index); setPlacementId(null)
+    document.getElementById('photo-library')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }
+  function removeFromLibrary(id: string) {
+    history.beginGroup()
+    setPlacements(current => current.map(value => value === id ? null : value))
+    setPhotos(current => current.filter(photo => photo.id !== id))
+    history.endGroup()
+    setPlacementId(null); setTargetIndex(null)
+    setToast('보관함에서 지웠어요. 실행 취소로 복원할 수 있어요.')
+  }
+  function unplaceSelected() {
+    if (!selectedPhotoId) return
+    setPlacements(current => current.map(id => id === selectedPhotoId ? null : id))
+    closePhoto()
   }
 
   function patchSelectedPhoto(patch: Partial<PhotoItem>) {
@@ -221,15 +253,14 @@ export default function App() {
 
   function deleteSelectedPhoto() {
     if (!selectedPhoto) return
-    setPhotos((current) => current.filter((photo) => photo.id !== selectedPhoto.id))
+    removeFromLibrary(selectedPhoto.id)
     closePhoto()
   }
-
   function moveSelected(direction: -1 | 1) {
-    if (selectedIndex < 0) return
+    if (!selectedPhotoId || selectedIndex < 0) return
     const target = selectedIndex + direction
-    if (target < 0 || target >= photos.length) return
-    movePhoto(selectedIndex, target)
+    if (target < 0 || target >= placements.length) return
+    setPlacements(current => placePhoto(current, selectedPhotoId, target))
   }
 
   function selectFrame(frameId: string) {
@@ -237,20 +268,21 @@ export default function App() {
     setConfig((current) => ({ ...current, frameId, frameVariantId: frame.variants[0].id }))
   }
 
-  function openPhoto(id: string) { history.beginGroup(); setSelectedPhotoId(id) }
+  function openPhoto(id: string) { setPlacementId(null); setTargetIndex(null); history.beginGroup(); setSelectedPhotoId(id) }
   function closePhoto() { history.endGroup(); setSelectedPhotoId(null) }
 
-  async function handleExport(format: 'png' | 'pdf') {
-    if (!photos.length) { setExportError('사진을 한 장 이상 넣어주세요.'); return }
-    const empty = config.layout.photoCount - photos.length
-    if (empty > 0 && !window.confirm(`아직 ${empty}칸이 비어 있어요. 빈칸을 남기고 저장할까요?`)) return
+  async function handleExport(format: 'png' | 'pdf', allowEmpty = false) {
+    if (!placedCount) { setExportError('사진을 한 칸 이상 배치해주세요.'); return }
+    const empty = config.layout.photoCount - placedCount
+    if (empty > 0 && !allowEmpty) { setPendingExport(format); return }
+    setPendingExport(null)
     setExportError(null)
     setBusy(`${config.printSize} ${format.toUpperCase()}를 만들고 있어요`)
     try {
       // Let the busy state paint before allocating a large print canvas.
       await new Promise(resolve => setTimeout(resolve, 50))
-      if (format === 'png') await exportPng(config, photos, exportDpi)
-      else await exportPdf(config, photos, exportDpi)
+      if (format === 'png') await exportPng(config, arranged, exportDpi)
+      else await exportPdf(config, arranged, exportDpi)
       setToast('파일 저장을 시작했어요. 다운로드 목록을 확인해주세요.')
     } catch {
       setExportError('저장하지 못했어요. 편집 내용은 그대로예요. 아래에서 150 DPI로 바꾸거나 작은 용지로 다시 시도해주세요.')
@@ -266,6 +298,7 @@ export default function App() {
     setSaveOpen(false)
     setExportError(null)
     setExportDpi(300)
+    setPlacementId(null); setTargetIndex(null); setPendingExport(null)
     setStep('home')
   }
 
@@ -277,7 +310,7 @@ export default function App() {
           <span>Memory Frame</span>
         </button>
         {step === 'editor' && (
-          <button type="button" className="top-save" onClick={() => setSaveOpen(true)}>저장하기</button>
+          <div className="top-actions"><button type="button" className="soft-button" onClick={() => document.getElementById('photo-library')?.scrollIntoView({ behavior: 'smooth', block: 'center' })}>사진관리</button><button type="button" className="top-save" onClick={() => setSaveOpen(true)}>저장하기</button></div>
         )}
       </header>
 
@@ -285,7 +318,7 @@ export default function App() {
         <section className="home-screen">
           <div className="hero-copy">
             <span className="eyebrow">FREE PHOTO FRAME MAKER</span>
-            <h1>사진만 고르면,<br />예쁜 한 장이 완성돼요.</h1>
+            <h1><span className="headline-line">사진만 고르면,</span><span className="headline-line"><span className="headline-phrase">예쁜 한 장이</span>{' '}<span className="headline-phrase">완성돼요.</span></span></h1>
             <p>복잡한 디자인은 필요 없어요. 모양과 프레임만 고르고 사진을 넣으면 끝.</p>
             <button type="button" className="primary-button hero-cta" onClick={() => setStep('layout')}>무료로 만들기</button>
             <div className="privacy-note"><span>✓</span> 사진은 서버에 업로드되지 않아요</div>
@@ -363,7 +396,7 @@ export default function App() {
             <div className="flow-content compact-flow">
               <p className="step-label">3 / 3</p>
               <h2>사진을 골라주세요</h2>
-              <p className="step-desc">최대 {config.layout.photoCount}장까지 한 번에 선택할 수 있어요.</p>
+              <p className="step-desc">{config.layout.photoCount}칸을 먼저 채워드려요. 더 고른 사진도 보관함에 모두 남아요.</p>
               <button type="button" className="upload-card" onClick={() => uploadInputRef.current?.click()}>
                 <span className="upload-icon">＋</span>
                 <strong>사진 선택하기</strong>
@@ -396,26 +429,39 @@ export default function App() {
               <div><p className="step-label">미리보기</p><h2>이미 거의 다 됐어요.</h2></div>
               <span className="local-badge">🔒 기기에서만 편집 중</span>
             </div>
-            <div className="preview-stage">
+            <div className="proof-toolbar">
+              <div className="segmented"><button type="button" className={frameFinish === 'paper' ? 'selected' : ''} onClick={() => setFrameFinish('paper')}>인쇄물 보기</button><button type="button" className={frameFinish !== 'paper' ? 'selected' : ''} onClick={() => setFrameFinish('black')}>액자에 넣어 보기</button></div>
+              {frameFinish !== 'paper' && <div className="finish-options" aria-label="미리보기 액자 색상">{(['black', 'white', 'wood'] as const).map(finish => <button type="button" key={finish} aria-pressed={frameFinish === finish} onClick={() => setFrameFinish(finish)}>{finish === 'black' ? '블랙' : finish === 'white' ? '화이트' : '우드'}</button>)}</div>}
+            </div>
+            {placementId && <div className="placement-message" role="status">넣을 칸을 눌러주세요. 이미 찬 칸도 바꿀 수 있어요.<button type="button" onClick={() => setPlacementId(null)}>취소</button></div>}
+            <div className="preview-stage" ref={previewRef}>
+              <FramePreview config={config} finish={frameFinish}>
               <PosterPreview
                 config={config}
-                photos={photos}
+                photos={arranged}
                 selectedPhotoId={selectedPhotoId}
                 onSelectPhoto={openPhoto}
-                onMovePhoto={movePhoto}
-                onAddPhoto={() => editorInputRef.current?.click()}
+                onPlace={assignPhoto}
+                placementId={placementId}
+                targetIndex={targetIndex}
+                onAddPhoto={chooseEmptySlot}
               />
+              </FramePreview>
             </div>
+            <p className="preview-help">{frameFinish === 'paper' ? '사진을 눌러 편집하거나 끌어서 자리를 바꾸세요.' : '액자 외형은 미리보기예요. 저장 파일에는 인쇄할 종이만 담겨요.'}</p>
             <div className="history-controls">
-              <button type="button" className="soft-button" disabled={!history.canUndo} onClick={history.undo}>↶ 실행 취소</button>
-              <button type="button" className="soft-button" disabled={!history.canRedo} onClick={history.redo}>↷ 다시 실행</button>
+              <button type="button" className="soft-button" disabled={!history.canUndo} onClick={() => { history.undo(); setPlacementId(null); setTargetIndex(null) }}>↶ 실행 취소</button>
+              <button type="button" className="soft-button" disabled={!history.canRedo} onClick={() => { history.redo(); setPlacementId(null); setTargetIndex(null) }}>↷ 다시 실행</button>
             </div>
-            <p className="preview-help">사진을 눌러 위치와 확대를 조절할 수 있어요.</p>
+            {targetIndex !== null && <p className="placement-message" role="status">{targetIndex + 1}번 칸에 넣을 사진을 골라주세요.<button type="button" onClick={() => setTargetIndex(null)}>취소</button></p>}
+            <PhotoLibrary photos={photos} placements={placements} selectedId={placementId}
+              onAdd={() => editorInputRef.current?.click()} onSelect={selectForPlacement} onEdit={openPhoto} onRemove={removeFromLibrary}
+              onFill={() => setPlacements(current => fillEmpty(current, photos))} onCancel={() => setPlacementId(null)} />
           </div>
 
           <aside className="control-panel">
             <section className="control-section">
-              <div className="control-title"><strong>프레임</strong><span>분위기만 골라주세요</span></div>
+              <div className="control-title"><strong>종이 배경</strong><span>인쇄되는 색상과 무늬</span></div>
               <div className="frame-row">
                 {framePresets.map((frame) => {
                   const variant = frame.variants[0]
@@ -512,6 +558,8 @@ export default function App() {
               )}
             </section>
 
+            <section className="control-section"><div className="control-title"><strong>액자 · 인쇄</strong></div><p className="print-note">{config.printSize === 'custom' ? '맞춤 크기' : config.printSize} · {paper(config).widthMm} × {paper(config).heightMm} mm<br />{config.printUse === 'frame' ? `액자 가림 여유 ${config.frameOverlapMm}mm 적용` : '종이 포스터용'}</p><button type="button" className="soft-button full" onClick={() => setSaveOpen(true)}>종이 크기와 여백 설정</button></section>
+
             <button type="button" className="primary-button save-main" onClick={() => setSaveOpen(true)}>완성했어요 · 저장하기</button>
             <button type="button" className="reset-link" onClick={resetAll}>처음부터 다시 만들기</button>
           </aside>
@@ -530,16 +578,17 @@ export default function App() {
         </section>
       )}
 
-      {selectedPhoto && selectedIndex >= 0 && (
+      {selectedPhoto && (
         <PhotoAdjuster
           config={config}
-          aspectRatio={(() => { const page = paper(config); const slot = slotsFor(config, page.width, page.height)[selectedIndex]; return slot.width / slot.height })()}
+          aspectRatio={(() => { const page = paper(config); const slot = slotsFor(config, page.width, page.height)[selectedIndex]; return slot ? slot.width / slot.height : 1 })()}
           photo={selectedPhoto}
           index={selectedIndex}
-          total={photos.length}
+          total={placements.length}
           onChange={patchSelectedPhoto}
           onReplace={(file) => void replaceSelectedPhoto(file)}
           onDelete={deleteSelectedPhoto}
+          onUnplace={selectedIndex >= 0 ? unplaceSelected : undefined}
           onMove={moveSelected}
           onClose={closePhoto}
         />
@@ -553,8 +602,8 @@ export default function App() {
               <button className="icon-button" type="button" onClick={() => setSaveOpen(false)} aria-label="닫기">×</button>
             </div>
             <div className="print-layout">
-              <div className="print-preview"><PosterPreview config={config} photos={photos} interactive={false} />
-                <p>{config.printSize} · {paper(config).widthMm} × {paper(config).heightMm} mm</p>
+              <div className="print-preview"><FramePreview config={config} finish={frameFinish}><PosterPreview config={config} photos={arranged} interactive={false} /></FramePreview>
+                <p>{config.printSize === 'custom' ? '맞춤' : config.printSize} · {paper(config).widthMm} × {paper(config).heightMm} mm</p>
               </div>
               <div className="print-controls">
                 <strong>용지 크기</strong>
@@ -565,6 +614,14 @@ export default function App() {
                     </button>
                   ))}
                 </div>
+                <button type="button" className="soft-button" aria-pressed={config.printSize === 'custom'} onClick={() => setConfig(c => ({ ...c, printSize: 'custom' }))}>액자 종이 크기 직접 입력</button>
+                {config.printSize === 'custom' && <div className="custom-paper"><label>짧은 변 (mm)<input type="number" min="80" max="600" defaultValue={config.customWidthMm} onBlur={event => { const value = Number(event.target.value); const safe = Math.max(80, Math.min(600, value || 210)); event.target.value = String(safe); setConfig(c => ({ ...c, customWidthMm: safe })) }} /></label><label>긴 변 (mm)<input type="number" min="80" max="600" defaultValue={config.customHeightMm} onBlur={event => { const value = Number(event.target.value); const safe = Math.max(80, Math.min(600, value || 297)); event.target.value = String(safe); setConfig(c => ({ ...c, customHeightMm: safe })) }} /></label><p className="print-note">80~600mm · 입력 후 다른 곳을 누르면 적용돼요.</p></div>}
+                <p className="print-note">액자 겉 크기가 아닌, 안에 넣는 종이 크기를 선택하세요. 별도 매트가 있는 액자는 사진이 보이는 창 크기도 확인해주세요.</p>
+                <strong>출력 용도</strong>
+                <div className="segmented"><button type="button" className={config.printUse === 'frame' ? 'selected' : ''} onClick={() => setConfig(c => ({ ...c, printUse: 'frame' }))}>액자에 넣기</button><button type="button" className={config.printUse === 'poster' ? 'selected' : ''} onClick={() => setConfig(c => ({ ...c, printUse: 'poster' }))}>종이 포스터</button></div>
+                <strong>사진 주변 여백</strong>
+                <div className="segmented">{([['minimal', '최소'], ['normal', '기본'], ['wide', '넉넉하게']] as const).map(([value, label]) => <button type="button" key={value} className={config.mat === value ? 'selected' : ''} onClick={() => setConfig(c => ({ ...c, mat: value }))}>{label}</button>)}</div>
+                {config.printUse === 'frame' && <details className="export-detail"><summary>액자 테두리에 가려지는 부분 · {config.frameOverlapMm}mm</summary><p>사진이 테두리에 가리지 않도록 안쪽에 여유를 둬요. 실제 액자에 맞춰 선택하세요.</p><div className="segmented">{([3,5,8] as const).map(mm => <button type="button" key={mm} className={config.frameOverlapMm === mm ? 'selected' : ''} onClick={() => setConfig(c => ({ ...c, frameOverlapMm: mm }))}>{mm}mm</button>)}</div></details>}
                 <strong>용지 방향</strong>
                 <div className="segmented">
                   <button type="button" className={config.orientation === 'portrait' ? 'selected' : ''} onClick={() => setConfig(c => ({ ...c, orientation: 'portrait' }))}>세로 용지</button>
@@ -575,23 +632,25 @@ export default function App() {
                   {([['color', '컬러'], ['photos-gray', '사진만 흑백'], ['all-gray', '전체 흑백']] as const).map(([mode, label]) => <button type="button" key={mode} className={config.colorMode === mode ? 'selected' : ''} onClick={() => setConfig(c => ({ ...c, colorMode: mode }))}>{label}</button>)}
                 </div>
                 <p className="print-note">흑백은 저장 이미지에 적용돼요. 실제 출력 시 프린터 설정도 확인해주세요.</p>
-                {photos.length > 0 && (() => {
-                  const dpis = photoDpis(config, photos)
-                  const low = dpis.map((dpi, i) => dpi < 150 ? i + 1 : 0).filter(Boolean)
+                {placedCount > 0 && (() => {
+                  const perSlot = photoDpis(config, arranged)
+                  const dpis = perSlot.filter((dpi): dpi is number => dpi !== null)
+                  const low = perSlot.map((dpi, i) => dpi !== null && dpi < 150 ? i + 1 : 0).filter(Boolean)
                   const medium = dpis.some(dpi => dpi < 300)
                   return <p className={`quality-note ${low.length ? 'warning' : ''}`} role="status">{low.length ? `사진 ${low.join(', ')}번은 크게 인쇄하면 흐릴 수 있어요. 원본 사진을 쓰거나 확대를 줄여보세요.` : medium ? '일부 사진은 300 DPI보다 낮아요. 작은 글씨나 얼굴을 인쇄 전에 확인해주세요.' : '선택한 크기에서 사진 해상도가 충분해요.'} <span>가장 낮은 사진: 약 {Math.min(...dpis)} DPI</span></p>
                 })()}
-                {photos.length < config.layout.photoCount && <p className="quality-note warning">{config.layout.photoCount - photos.length}칸이 비어 있어요. 저장하면 해당 위치는 배경으로 남아요.</p>}
+                {placedCount < config.layout.photoCount && <p className="quality-note warning">{config.layout.photoCount - placedCount}칸이 비어 있어요. 저장하면 해당 위치는 배경으로 남아요.</p>}
                 <details className="export-detail"><summary>저장이 어렵다면 · 해상도 변경</summary>
                   <label>출력 해상도 <select aria-label="출력 해상도" value={exportDpi} onChange={event => setExportDpi(Number(event.target.value))}><option value={300}>300 DPI · 고화질</option><option value={150}>150 DPI · 가벼운 파일</option></select></label>
                   <p>150 DPI는 파일을 작게 만들지만 인쇄 선명도가 낮아질 수 있어요.</p>
                 </details>
+                {pendingExport && <div className="quality-note warning" role="alert"><p>비어 있는 칸을 남기고 저장할까요?</p><div className="export-buttons"><button type="button" className="soft-button" onClick={() => setPendingExport(null)}>돌아가기</button><button type="button" className="soft-button" onClick={() => void handleExport(pendingExport, true)}>빈칸 포함 저장</button></div></div>}
                 {exportError && <p className="quality-note warning" role="alert">{exportError}</p>}
                 <div className="export-buttons">
-                  <button type="button" className="soft-button" disabled={!photos.length || !!busy} onClick={() => void handleExport('png')}>PNG 저장</button>
-                  <button type="button" className="primary-button" disabled={!photos.length || !!busy} onClick={() => void handleExport('pdf')}>PDF 저장</button>
+                  <button type="button" className="soft-button" disabled={!placedCount || !!busy} onClick={() => void handleExport('png')}>PNG 저장</button>
+                  <button type="button" className="primary-button" disabled={!placedCount || !!busy} onClick={() => void handleExport('pdf')}>PDF 저장</button>
                 </div>
-                <p className="print-note">워터마크 없이 무료 · 출력 시 ‘실제 크기(100%)’를 선택하세요. 프린터에 따라 바깥 여백이 생길 수 있어요.</p>
+                <p className="print-note">액자 모형은 파일에 포함되지 않아요. 출력 시 ‘실제 크기(100%)’를 선택하세요. 프린터에 따라 바깥 여백이 생길 수 있어요.</p>
               </div>
             </div>
           </section>

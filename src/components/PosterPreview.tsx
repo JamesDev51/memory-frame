@@ -3,12 +3,14 @@ import { paper, slotsFor } from '../utils/geometry'
 import { renderToCanvas } from '../utils/render'
 import type { EditorConfig, PhotoItem } from '../types/editor'
 interface Props {
-  config: EditorConfig; photos: PhotoItem[]; selectedPhotoId?: string | null
-  onSelectPhoto?: (id: string) => void; onMovePhoto?: (from: number, to: number) => void
-  onAddPhoto?: () => void; interactive?: boolean
+  config: EditorConfig; photos: (PhotoItem | null)[]; selectedPhotoId?: string | null
+  onSelectPhoto?: (id: string) => void
+  onAddPhoto?: (index: number) => void; interactive?: boolean
+  placementId?: string | null; onPlace?: (id: string, index: number) => void; targetIndex?: number | null
 }
-export default function PosterPreview({ config, photos, selectedPhotoId, onSelectPhoto, onMovePhoto, onAddPhoto, interactive = true }: Props) {
+export default function PosterPreview({ config, photos, selectedPhotoId, onSelectPhoto, onAddPhoto, placementId, onPlace, targetIndex, interactive = true }: Props) {
   const ref = useRef<HTMLCanvasElement>(null)
+  const [dropIndex, setDropIndex] = useState<number | null>(null)
   const [error, setError] = useState(false)
   const page = paper(config), width = 900, height = width * page.heightMm / page.widthMm
   const slots = slotsFor(config, width, height)
@@ -30,17 +32,18 @@ export default function PosterPreview({ config, photos, selectedPhotoId, onSelec
     {interactive && slots.map((slot, i) => {
       const photo = photos[i]
       return <button key={photo?.id ?? `empty-${i}`} type="button"
-        className={`tile-hit ${photo ? '' : 'empty-photo'} ${photo?.id === selectedPhotoId ? 'selected-photo' : ''}`}
+        className={`tile-hit ${photo ? '' : 'empty-photo'} ${photo?.id === selectedPhotoId ? 'selected-photo' : ''} ${placementId ? 'placement-target' : ''} ${dropIndex === i || targetIndex === i ? 'drop-target' : ''}`}
         style={{ left: `${slot.x / width * 100}%`, top: `${slot.y / height * 100}%`, width: `${slot.width / width * 100}%`, height: `${slot.height / height * 100}%` }}
-        aria-label={photo ? `${i + 1}번째 사진 편집` : '사진 추가'}
-        onClick={() => photo ? onSelectPhoto?.(photo.id) : onAddPhoto?.()} draggable={!!photo}
-        onDragStart={e => { e.dataTransfer.setData('text/photo-index', String(i)); e.dataTransfer.effectAllowed = 'move' }}
-        onDragOver={e => e.preventDefault()} onDrop={e => {
-          e.preventDefault(); const value = e.dataTransfer.getData('text/photo-index')
-          if (!value) return
-          const from = Number(value)
-          if (Number.isInteger(from) && from >= 0 && from < photos.length && from !== i) onMovePhoto?.(from, i)
+        aria-label={placementId ? `${i + 1}번 칸에 사진 배치` : photo ? `${i + 1}번째 사진 편집` : `${i + 1}번 빈칸 채우기`}
+        onClick={() => placementId ? onPlace?.(placementId, i) : photo ? onSelectPhoto?.(photo.id) : onAddPhoto?.(i)} draggable={!!photo}
+        onDragStart={e => { if (photo) e.dataTransfer.setData('application/x-memory-frame-photo', photo.id); e.dataTransfer.effectAllowed = 'move' }}
+        onDragOver={e => { if (e.dataTransfer.types.includes('application/x-memory-frame-photo')) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setDropIndex(i) } }}
+        onDragLeave={() => setDropIndex(null)} onDrop={e => {
+          e.preventDefault(); setDropIndex(null)
+          const id = e.dataTransfer.getData('application/x-memory-frame-photo')
+          if (id) onPlace?.(id, i)
         }}>
+
         {photo ? <span className="photo-index">{i + 1}</span> : <span>＋</span>}
       </button>
     })}

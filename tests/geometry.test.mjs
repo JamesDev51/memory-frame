@@ -6,15 +6,15 @@ import os from 'node:os'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 const root = await fs.mkdtemp(path.join(os.tmpdir(), 'memory-frame-test-'))
-execFileSync('node_modules/.bin/tsc', ['src/utils/geometry.ts', 'src/utils/history.ts', '--ignoreConfig', '--target', 'es2022', '--module', 'esnext', '--moduleResolution', 'bundler', '--skipLibCheck', '--outDir', root])
+execFileSync('node_modules/.bin/tsc', ['src/utils/geometry.ts', 'src/utils/history.ts', 'src/utils/placements.ts', '--ignoreConfig', '--target', 'es2022', '--module', 'esnext', '--moduleResolution', 'bundler', '--skipLibCheck', '--outDir', root])
 const geometryPath = path.join(root, 'utils/geometry.js')
 await fs.writeFile(geometryPath, (await fs.readFile(geometryPath, 'utf8')).replace("'../presets/layouts'", "'../presets/layouts.js'"))
 const { getLayoutPreset, PHOTO_COUNTS } = await import(pathToFileURL(path.join(root, 'presets/layouts.js')))
 const { slotsFor, paper, photoPlacement, photoDpis } = await import(pathToFileURL(path.join(root, 'utils/geometry.js')))
 const base = { frameId: 'white', frameVariantId: 'white', shadow: 'off', colorMode: 'color' }
-test('all 288 combinations have exact count, square non-overlapping tiles within the page', () => {
-  for (const type of ['grid', 'heart']) for (const count of PHOTO_COUNTS) for (const gap of ['narrow', 'normal', 'wide']) for (const printSize of ['A5', 'A4', 'A3', 'A2']) for (const orientation of ['portrait', 'landscape']) {
-    const config = { ...base, layout: getLayoutPreset(type, count), gap, printSize, orientation }
+test('all 1512 combinations have exact count, square non-overlapping tiles within the page', () => {
+  for (const type of ['grid', 'heart']) for (const count of PHOTO_COUNTS) for (const gap of ['narrow', 'normal', 'wide']) for (const printSize of ['A5', 'A4', 'A3', 'A2', '5x7', '8x10', 'custom']) for (const mat of ['minimal', 'normal', 'wide']) for (const orientation of ['portrait', 'landscape']) {
+    const config = { ...base, layout: getLayoutPreset(type, count), gap, printSize, orientation, mat, printUse: 'frame', frameOverlapMm: 8, customWidthMm: 80, customHeightMm: 600 }
     const page = paper(config), slots = slotsFor(config, page.width, page.height)
     assert.equal(slots.length, count)
     for (const [i, r] of slots.entries()) {
@@ -73,4 +73,40 @@ test('history is bounded and a new edit after undo clears the redo branch', () =
   h=updateHistory(h,'config',{n:100},true)
   assert.equal(h.future.length,0)
   assert.equal(redoHistory(h).present.config.n,100)
+})
+
+const { resizePlacements, placePhoto, fillEmpty, arrangedPhotos } = await import(pathToFileURL(path.join(root, 'utils/placements.js')))
+test('placing library photos replaces one slot without losing the old library item', () => {
+  const photos = ['a', 'b', 'c', 'd'].map(id => ({ id, url: `blob:${id}` }))
+  assert.deepEqual(placePhoto(['a','b',null], 'c', 1), ['a','c',null])
+  assert.equal(photos.length,4)
+  assert.deepEqual(placePhoto(['a','b',null], 'a', 1), ['b','a',null])
+  assert.deepEqual(placePhoto(['a','b',null], 'a', 2), [null,'b','a'])
+})
+test('multiple add fills empty slots only, retaining all excess images', () => {
+  const photos = ['a','b','c','d','e','f'].map(id => ({ id }))
+  assert.deepEqual(fillEmpty(['a',null,'c',null],photos), ['a','b','c','d'])
+  assert.equal(photos.length,6)
+  assert.deepEqual(fillEmpty(['a','b','c','d'],photos), ['a','b','c','d'])
+})
+test('shrinking layouts never deletes library photos; render keeps slot holes', () => {
+  const photos = ['a','b','c','d'].map(id => ({id}))
+  const slots = resizePlacements(['a',null,'b','c'],2)
+  assert.deepEqual(slots,['a',null])
+  assert.deepEqual(arrangedPhotos([null,'b',null,'a'],photos),[null,photos[1],null,photos[0]])
+  assert.deepEqual(resizePlacements(slots,4),['a',null,null,null])
+  assert.deepEqual(arrangedPhotos(['missing'],photos),[null])
+})
+test('undo restores the library and placements atomically', () => {
+  const original = { past: [], present: { config:{}, photos:[{id:'a',url:'blob:a'}], placements:['a',null] }, future:[] }
+  const removed = updateHistory(original,'photos',[],true)
+  const emptied = updateHistory(removed,'placements',[null,null],false)
+  assert.deepEqual(undoHistory(emptied).present,original.present)
+})
+test('all frame photos stay beyond the selected overlap even with minimum margins', () => {
+  for(const printSize of ['A5','A2','5x7','custom']) {
+    const config = { ...base, layout:getLayoutPreset('heart',20), printSize, orientation:'portrait', gap:'wide', mat:'minimal', printUse:'frame', frameOverlapMm:8, customWidthMm:80, customHeightMm:100 }
+    const page=paper(config), overlap=8*page.width/page.widthMm
+    for(const slot of slotsFor(config,page.width,page.height)) assert.ok(slot.x>=overlap && slot.y>=overlap && slot.x+slot.width<=page.width-overlap && slot.y+slot.height<=page.height-overlap)
+  }
 })

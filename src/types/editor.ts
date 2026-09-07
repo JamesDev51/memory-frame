@@ -46,7 +46,12 @@ export interface EditorConfig {
   frameId: string
   frameVariantId: string
   shadow: ShadowMode
-  printSize: 'A5' | 'A4' | 'A3' | 'A2'
+  printSize: 'A5' | 'A4' | 'A3' | 'A2' | '5x7' | '8x10' | 'custom'
+  customWidthMm: number
+  customHeightMm: number
+  printUse: 'frame' | 'poster'
+  mat: 'minimal' | 'normal' | 'wide'
+  frameOverlapMm: 3 | 5 | 8
   orientation: 'portrait' | 'landscape'
   colorMode: 'color' | 'photos-gray' | 'all-gray'
 }

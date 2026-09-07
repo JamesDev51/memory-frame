@@ -12,13 +12,14 @@ interface PhotoAdjusterProps {
   onChange: (patch: Partial<PhotoItem>) => void
   onReplace: (file: File) => void
   onDelete: () => void
+  onUnplace?: () => void
   onMove: (direction: -1 | 1) => void
   onClose: () => void
 }
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value))
 
-export default function PhotoAdjuster({ config, aspectRatio, photo, index, total, onChange, onReplace, onDelete, onMove, onClose }: PhotoAdjusterProps) {
+export default function PhotoAdjuster({ config, aspectRatio, photo, index, total, onChange, onReplace, onDelete, onUnplace, onMove, onClose }: PhotoAdjusterProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   useEffect(() => {
     let active = true
@@ -63,7 +64,7 @@ export default function PhotoAdjuster({ config, aspectRatio, photo, index, total
         <div className="sheet-grabber" />
         <div className="sheet-title-row">
           <div>
-            <p className="sheet-kicker">사진 {index + 1} / {total}</p>
+            <p className="sheet-kicker">{index >= 0 ? `${index + 1}번 칸 · ${total}칸` : '미배치 사진'}</p>
             <h2>사진 위치를 맞춰주세요</h2>
           </div>
           <button className="icon-button" type="button" onClick={onClose} aria-label="닫기">×</button>
@@ -100,9 +101,9 @@ export default function PhotoAdjuster({ config, aspectRatio, photo, index, total
 
         <button type="button" className="reset-link" onClick={() => onChange({ scale: 1, offsetX: 0, offsetY: 0 })}>사진 위치 초기화</button>
         <div className="adjuster-actions">
-          <button type="button" className="soft-button" disabled={index === 0} onClick={() => onMove(-1)}>← 앞칸</button>
-          <button type="button" className="soft-button" disabled={index === total - 1} onClick={() => onMove(1)}>뒷칸 →</button>
-          <button type="button" className="soft-button" onClick={() => inputRef.current?.click()}>사진 교체</button>
+          <button type="button" className="soft-button" disabled={index <= 0} onClick={() => onMove(-1)}>← 앞칸</button>
+          <button type="button" className="soft-button" disabled={index < 0 || index === total - 1} onClick={() => onMove(1)}>뒷칸 →</button>
+          <button type="button" className="soft-button" onClick={() => inputRef.current?.click()}>새 파일로 교체</button>
         </div>
         <input
           ref={inputRef}
@@ -117,7 +118,7 @@ export default function PhotoAdjuster({ config, aspectRatio, photo, index, total
         />
 
         <div className="adjuster-footer">
-          <button type="button" className="text-danger" onClick={onDelete}>이 사진 삭제</button>
+          {onUnplace ? <button type="button" className="text-danger" onClick={onUnplace}>이 칸에서 빼기</button> : <button type="button" className="text-danger" onClick={onDelete}>보관함에서 삭제</button>}
           <button type="button" className="primary-button compact" onClick={onClose}>완료</button>
         </div>
       </section>

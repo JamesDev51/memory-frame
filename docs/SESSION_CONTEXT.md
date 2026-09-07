@@ -548,3 +548,7 @@ When ambiguous, prefer **simpler UI and better presets** over additional control
 ## 23. V1.2 handoff — 2026-09-06
 
 User asked to resolve remaining Heart crop issues and add print-size/color choices, then approved detailed planning, implementation/review cycles, GitHub push and Vercel deployment with actual tests. Earlier code had preview offsets 24% vs export 35%, fixed screen gaps vs proportional export gaps, and mismatched photo adjustment aspect ratios. V1.2 replaces that split with shared geometry + Canvas rendering, adds square Heart presets, cover/contain, A2, paper orientation, color/grayscale, effective DPI warnings and reversible edits. Do not equate rectangular tiles with zero source-photo cropping: cover still crops; contain shows the complete original. See PRD section 28 and VALIDATION.md for current requirements and evidence.
+
+## 24. V1.3 handoff — 2026-09-07
+
+User reported orphaned Korean heading syllable, awkward Heart, difficult additional multi-selection, and requested photo management plus dragging into layouts. Physical wedding photo-table/wall frames are now explicit use cases. Implemented photo bank + slot ID model, repeated bulk addition without truncation, swap/replace through native desktop drag or photo-then-slot selection, reversible unplace/count decrease, tapered Heart tiles, and frame-aware paper settings. Added inch/custom paper, mat presets and edge overlap preview. Follow docs/V1_3_PLAN.md and VALIDATION.md; do not claim actual printer or phone verification without evidence.

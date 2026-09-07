@@ -5,18 +5,30 @@ export const PRINT_SIZES = {
   A4: { widthMm: 210, heightMm: 297, hint: '책상 · 선반 액자' },
   A3: { widthMm: 297, heightMm: 420, hint: '큰 액자 · 포토테이블' },
   A2: { widthMm: 420, heightMm: 594, hint: '대형 포스터' },
+  '5x7': { widthMm: 127, heightMm: 177.8, hint: '5×7인치 액자' },
+  '8x10': { widthMm: 203.2, heightMm: 254, hint: '8×10인치 액자' },
 } as const
 export type PrintSize = keyof typeof PRINT_SIZES
 export type Rect = { x: number; y: number; width: number; height: number }
 export function paper(config: EditorConfig, dpi = 300) {
-  const size = PRINT_SIZES[config.printSize]
+  const clampSize = (value: number) => Math.max(80, Math.min(600, Number.isFinite(value) ? value : 210))
+  const custom = [clampSize(config.customWidthMm), clampSize(config.customHeightMm)].sort((a, b) => a - b)
+  const size = config.printSize === 'custom' ? { widthMm: custom[0], heightMm: custom[1] } : PRINT_SIZES[config.printSize]
   const [widthMm, heightMm] = config.orientation === 'landscape' ? [size.heightMm, size.widthMm] : [size.widthMm, size.heightMm]
   return { widthMm, heightMm, width: Math.round(widthMm / 25.4 * dpi), height: Math.round(heightMm / 25.4 * dpi) }
 }
+export function safeMarginMm(config: EditorConfig) {
+  const page = paper(config), short = Math.min(page.widthMm, page.heightMm)
+  const overlap = config.printUse === 'frame' ? (config.frameOverlapMm ?? 5) + 3 : 3
+  return Math.max(overlap, short * ({ minimal: .04, normal: .09, wide: .15 }[config.mat ?? 'normal']))
+}
 export function slotsFor(config: EditorConfig, width: number, height: number): Rect[] {
   const gap = Math.min(width, height) * ({ narrow: .006, normal: .014, wide: .026 }[config.gap])
+  const page = paper(config)
+  const margin = safeMarginMm(config) * width / page.widthMm
+  const availableW = width - 2 * margin, availableH = height - 2 * margin
   if (config.layout.type === 'heart') {
-    const side = Math.min(width * .83, height * .856)
+    const side = Math.min(availableW, availableH)
     return getHeartSlots(config.layout.photoCount).map(s => ({
       x: (width - side) / 2 + s.x * side + gap / 2,
       y: (height - side) / 2 + s.y * side + gap / 2,
@@ -24,7 +36,7 @@ export function slotsFor(config: EditorConfig, width: number, height: number): R
     }))
   }
   const { rows, columns } = config.layout
-  const cell = Math.min((width * .83 - gap * (columns - 1)) / columns, (height * .856 - gap * (rows - 1)) / rows)
+  const cell = Math.min((availableW - gap * (columns - 1)) / columns, (availableH - gap * (rows - 1)) / rows)
   const w = cell * columns + gap * (columns - 1), h = cell * rows + gap * (rows - 1)
   return Array.from({ length: config.layout.photoCount }, (_, i) => ({
     x: (width - w) / 2 + i % columns * (cell + gap),
@@ -40,8 +52,8 @@ export function photoPlacement(photo: PhotoItem, width: number, height: number) 
   const clamp = (n: number) => Math.max(-1, Math.min(1, n))
   return { x: (width - w) / 2 + (contain ? 0 : clamp(photo.offsetX) * maxX), y: (height - h) / 2 + (contain ? 0 : clamp(photo.offsetY) * maxY), width: w, height: h, scale, maxX, maxY }
 }
-export function photoDpis(config: EditorConfig, photos: PhotoItem[]) {
+export function photoDpis(config: EditorConfig, photos: (PhotoItem | null)[]) {
   const page = paper(config)
   const slots = slotsFor(config, page.width, page.height)
-  return photos.map((photo, i) => Math.floor(300 / photoPlacement(photo, slots[i].width, slots[i].height).scale))
+  return photos.map((photo, i) => photo && slots[i] ? Math.floor(300 / photoPlacement(photo, slots[i].width, slots[i].height).scale) : null)
 }

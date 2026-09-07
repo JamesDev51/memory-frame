@@ -79,3 +79,14 @@ npm run build
 - `npm ci`, `npm test`, `npm run build`.
 
 [Implementation plan](docs/IMPLEMENTATION_PLAN.md) · [Validation record](docs/VALIDATION.md).
+
+## V1.3
+
+- 사진관리 보관함과 배치 칸 분리: 반복 다중 추가, 미배치 필터, 빈칸 자동 채우기.
+- 보관함→칸 배치, 칸끼리 교환: 데스크톱 끌어 놓기와 터치/클릭 선택 방식.
+- 사진 수를 줄이거나 칸에서 빼도 원본은 보관함에 유지.
+- Heart 하단으로 갈수록 작은 정사각형 타일, 제목 어절 단위 줄바꿈.
+- 5×7 / 8×10 인치와 80~600mm 맞춤 종이, 액자 가림 여유, 여백 프리셋.
+- 실제 액자 미리보기와 인쇄할 종이 구분. 액자 외형은 PNG/PDF에 포함하지 않음.
+
+[수정 계획](docs/V1_3_PLAN.md) · [검수 기록](docs/VALIDATION.md)

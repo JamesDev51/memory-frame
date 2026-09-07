@@ -54,7 +54,7 @@ export function drawPhoto(ctx: CanvasRenderingContext2D, image: HTMLImageElement
   }
   ctx.restore()
 }
-export async function renderToCanvas(config: EditorConfig, photos: PhotoItem[], width: number, height: number, cancelled = () => false) {
+export async function renderToCanvas(config: EditorConfig, photos: (PhotoItem | null)[], width: number, height: number, cancelled = () => false) {
   const canvas = document.createElement('canvas')
   canvas.width = width; canvas.height = height
   const ctx = canvas.getContext('2d', { alpha: false })
@@ -78,8 +78,10 @@ export async function renderToCanvas(config: EditorConfig, photos: PhotoItem[], 
   try {
     for (let i = 0; i < photos.length && i < slots.length; i++) {
       if (cancelled()) break
-      const image = await loadImage(photos[i].url)
-      if (!cancelled()) drawPhoto(ctx, image, photos[i], slots[i], config)
+      const photo = photos[i]
+      if (!photo) continue
+      const image = await loadImage(photo.url)
+      if (!cancelled()) drawPhoto(ctx, image, photo, slots[i], config)
     }
     return canvas
   } catch (error) { canvas.width = 0; canvas.height = 0; throw error }
@@ -90,7 +92,7 @@ function downloadBlob(blob: Blob, filename: string) {
   document.body.appendChild(anchor); anchor.click(); anchor.remove()
   setTimeout(() => URL.revokeObjectURL(url), 60000)
 }
-export async function exportPng(config: EditorConfig, photos: PhotoItem[], dpi = 300) {
+export async function exportPng(config: EditorConfig, photos: (PhotoItem | null)[], dpi = 300) {
   const page = paper(config, dpi), canvas = await renderToCanvas(config, photos, page.width, page.height)
   try {
     const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/png'))
@@ -98,7 +100,7 @@ export async function exportPng(config: EditorConfig, photos: PhotoItem[], dpi =
     downloadBlob(blob, `memory-frame-${config.printSize}-${dpi}dpi-${Date.now()}.png`)
   } finally { canvas.width = 0; canvas.height = 0 }
 }
-export async function exportPdf(config: EditorConfig, photos: PhotoItem[], dpi = 300) {
+export async function exportPdf(config: EditorConfig, photos: (PhotoItem | null)[], dpi = 300) {
   const { jsPDF } = await import('jspdf')
   const page = paper(config, dpi), canvas = await renderToCanvas(config, photos, page.width, page.height)
   try {
@@ -106,7 +108,7 @@ export async function exportPdf(config: EditorConfig, photos: PhotoItem[], dpi =
     if (!blob) throw new Error('PDF 이미지를 만들지 못했습니다.')
     const bytes = new Uint8Array(await blob.arrayBuffer())
     canvas.width = 0; canvas.height = 0
-    const pdf = new jsPDF({ orientation: config.orientation, unit: 'mm', format: [page.widthMm, page.heightMm], compress: true })
+    const pdf = new jsPDF({ orientation: page.widthMm > page.heightMm ? 'landscape' : 'portrait', unit: 'mm', format: [page.widthMm, page.heightMm], compress: true })
     pdf.addImage(bytes, 'JPEG', 0, 0, page.widthMm, page.heightMm)
     pdf.save(`memory-frame-${config.printSize}-${dpi}dpi-${Date.now()}.pdf`)
   } finally { canvas.width = 0; canvas.height = 0 }

@@ -674,3 +674,13 @@ This section supersedes earlier conflicting V1 requirements.
 - Undo/redo (40 checkpoints), photo dialog edits grouped, including deletion/replacement and count reduction. Object URLs stay valid while referenced by current state or history.
 - Deferred: persistent project continuation and sharing. No server/upload/login introduced.
 - See IMPLEMENTATION_PLAN.md and VALIDATION.md for delivery scope and actual validation evidence.
+
+## 29. V1.3 — 사진관리와 결혼식 액자 출력
+
+사용자 후속 요청에 따라 사진 보관함과 배치 칸을 분리한다. 최초/추가 업로드 모두 다중 선택을 지원하며, 넘치는 사진은 버리지 않는다. 사진관리에서 편집/삭제/미배치 조회/빈칸 채우기를 제공한다. 데스크톱은 보관함→칸 및 칸→칸 드래그, 터치는 사진 선택→대상 칸 선택으로 배치한다. 기존 배치 사진을 이동하면 두 칸을 교환한다. 미배치 사진으로 교체하면 원래 사진은 보관함에 남는다. 칸 수 감소는 원본 삭제를 의미하지 않는다.
+
+Heart는 작은 하단 타일로 점진적으로 좁아지는 구성으로 조정하며 전역 마스크는 금지한다. Cover는 원본을 일부 자를 수 있으므로 사진 전체 보기 옵션을 유지한다.
+
+출력은 A5/A4/A3/A2 외에 5×7인치(127×177.8mm), 8×10인치(203.2×254mm), 80~600mm 사용자 입력을 지원한다. 입력 치수는 액자 외곽이 아닌 삽입 종이 크기다. 액자/종이 포스터 용도, 여백 3단계, 테두리 가림 3/5/8mm를 제공한다. 액자 가림보다 3mm 더 안쪽에 사진을 배치한다. 별도 물리 매트 창 치수의 자동 계산은 이번 범위에 포함하지 않으며 사용자 확인 안내를 제공한다. 검정/흰색/우드 액자 모형은 미리보기 전용이고 출력에는 포함하지 않는다.
+
+자유 좌표 이동, 텍스트 편집, 주문/배송, 실물 인쇄 검수는 추가하지 않는다.

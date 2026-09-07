@@ -218,3 +218,7 @@ Prefer fewer, better choices.
 ## V1.2 approved additions — 2026-09-06
 
 User approved implementation, review, GitHub push and Vercel production testing of the proposed revision. Added A2 and paper orientation, three color modes, effective print DPI warnings, contain/cover, reset, undo/redo, partial upload recovery and empty-slot confirmation. Keep all controls in focused photo/print sheets. Original row/column and free-color-picker exclusions remain. Persistent continuation and sharing remain deferred. See PRD section 28.
+
+## V1.3 feedback-driven revision — 2026-09-07
+
+반복 다중 업로드와 별도 사진관리, 고정 칸 드래그/탭 교체를 승인된 후속 구현 범위로 반영했다. 자유 캔버스 배치가 아니라 기존 Grid/Heart 칸 안에서만 재배치한다. 원본 보관함과 슬롯 ID 배열을 분리해 칸 감소 시 사진 손실을 방지한다. 실제 액자에 넣는 용도를 고려해 종이 배경(인쇄)과 액자 외형(미리보기)을 구분한다. 인치/맞춤 종이와 가림 여유를 제공한다. 별도 매트 창 맞춤 및 웨딩 텍스트 템플릿은 추후 제안 범위다.
