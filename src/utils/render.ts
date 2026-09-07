@@ -1,6 +1,6 @@
 import { getFramePreset, getFrameVariant } from '../presets/frames'
 import type { EditorConfig, PhotoItem } from '../types/editor'
-import { paper, slotsFor, photoPlacement, type Rect } from './geometry'
+import { paper, slotsFor, photoPlacement, shadowStrength, type Rect } from './geometry'
 export { PRINT_SIZES, type PrintSize } from './geometry'
 
 export function loadImage(url: string): Promise<HTMLImageElement> {
@@ -23,10 +23,11 @@ export function matColor(config: EditorConfig) {
 export function drawPhoto(ctx: CanvasRenderingContext2D, image: HTMLImageElement, photo: PhotoItem, rect: Rect, config: EditorConfig) {
   const { x, y, width, height } = rect
   ctx.save()
-  if (config.shadow === 'on') {
-    ctx.shadowColor = 'rgba(30,30,30,.19)'
-    ctx.shadowBlur = width * .045
-    ctx.shadowOffsetY = width * .018
+  const strength = shadowStrength(config.shadow)
+  if (strength > 0) {
+    ctx.shadowColor = `rgba(30,30,30,${strength * .38})`
+    ctx.shadowBlur = width * (.015 + strength * .06)
+    ctx.shadowOffsetY = width * strength * .036
   }
   ctx.fillStyle = config.colorMode === 'all-gray' ? gray(matColor(config)) : matColor(config)
   ctx.fillRect(x, y, width, height)

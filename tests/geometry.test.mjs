@@ -10,10 +10,10 @@ execFileSync('node_modules/.bin/tsc', ['src/utils/geometry.ts', 'src/utils/histo
 const geometryPath = path.join(root, 'utils/geometry.js')
 await fs.writeFile(geometryPath, (await fs.readFile(geometryPath, 'utf8')).replace("'../presets/layouts'", "'../presets/layouts.js'"))
 const { getLayoutPreset, PHOTO_COUNTS, HEART_PHOTO_COUNTS } = await import(pathToFileURL(path.join(root, 'presets/layouts.js')))
-const { slotsFor, paper, photoPlacement, photoDpis, safeMarginMm } = await import(pathToFileURL(path.join(root, 'utils/geometry.js')))
+const { slotsFor, paper, photoPlacement, photoDpis, safeMarginMm, shadowStrength, effectiveGapRatio, maxGapRatio } = await import(pathToFileURL(path.join(root, 'utils/geometry.js')))
 const base = { frameId: 'white', frameVariantId: 'white', shadow: 'off', colorMode: 'color' }
 test('all supported combinations have exact count, non-overlapping tiles within the page', () => {
-  for (const type of ['grid', 'heart']) for (const count of (type === 'heart' ? HEART_PHOTO_COUNTS : PHOTO_COUNTS)) for (const gap of [...Array.from({length:27},(_,i)=>i/1000), 'narrow', 'normal', 'wide']) for (const printSize of ['A5', 'A4', 'A3', 'A2', '5x7', '8x10', 'custom']) for (const mat of ['minimal', 'normal', 'wide']) for (const orientation of ['portrait', 'landscape']) {
+  for (const type of ['grid', 'heart']) for (const count of (type === 'heart' ? HEART_PHOTO_COUNTS : PHOTO_COUNTS)) for (const gap of [...Array.from({length:81},(_,i)=>i/1000), 'narrow', 'normal', 'wide']) for (const printSize of ['A5', 'A4', 'A3', 'A2', '5x7', '8x10', 'custom']) for (const mat of ['minimal', 'normal', 'wide']) for (const orientation of ['portrait', 'landscape']) {
     const config = { ...base, layout: getLayoutPreset(type, count), gap, printSize, orientation, mat, printUse: 'frame', frameOverlapMm: 8, customWidthMm: 80, customHeightMm: 600 }
     const page = paper(config), slots = slotsFor(config, page.width, page.height)
     assert.equal(slots.length, count)
@@ -134,4 +134,15 @@ test('rectangular grid crops fill without gaps and contain preserves the origina
     const f=photoPlacement({...photo,fit:'contain'},w,h)
     assert.ok(f.x>=0&&f.y>=0&&f.x+f.width<=w+1e-6&&f.y+f.height<=h+1e-6)
   }
+})
+
+test('shadow intensity is bounded and spacing never erases tiny heart tiles',()=>{
+  assert.equal(shadowStrength(0),0); assert.equal(shadowStrength(100),1)
+  assert.equal(shadowStrength('on'),.5); assert.equal(shadowStrength('off'),0)
+  assert.ok(shadowStrength(25)<shadowStrength(75))
+  assert.equal(shadowStrength(NaN),0)
+  const config={...base,layout:getLayoutPreset('heart',20),gap:.08,printSize:'A5',orientation:'portrait',mat:'wide',printUse:'frame',frameOverlapMm:8}
+  assert.ok(effectiveGapRatio(config)<=maxGapRatio(config))
+  const page=paper(config)
+  for(const s of slotsFor(config,page.width,page.height)) assert.ok(s.width>0 && s.height>0)
 })

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useEditorHistory } from './hooks/useEditorHistory'
-import { paper, slotsFor, photoDpis, gapRatio } from './utils/geometry'
+import { paper, slotsFor, photoDpis, effectiveGapRatio, maxGapRatio, shadowStrength } from './utils/geometry'
+import ScenePreview from './components/ScenePreview'
 import PhotoLibrary from './components/PhotoLibrary'
 import FramePreview, { type FrameFinish } from './components/FramePreview'
 import { arrangedPhotos, placePhoto, resizePlacements } from './utils/placements'
@@ -11,7 +12,7 @@ import { getHeartSlots, getLayoutPreset, PHOTO_COUNTS, HEART_PHOTO_COUNTS } from
 import type { EditorConfig, LayoutType, PhotoItem } from './types/editor'
 import { exportPdf, exportPng, PRINT_SIZES, type PrintSize } from './utils/render'
 
-type Step = 'home' | 'layout' | 'count' | 'upload' | 'editor'
+type Step = 'home' | 'layout' | 'count' | 'editor'
 
 const initialConfig: EditorConfig = {
   layout: getLayoutPreset('grid', 4),
@@ -90,7 +91,6 @@ export default function App() {
   const [exportError, setExportError] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [toast, setToast] = useState<string | null>(null)
-  const uploadInputRef = useRef<HTMLInputElement>(null)
   const editorInputRef = useRef<HTMLInputElement>(null)
 
 
@@ -145,7 +145,7 @@ export default function App() {
   function chooseCount(count: number) {
     setPlacements(resizePlacements(placements, count))
     setConfig((current) => ({ ...current, layout: getLayoutPreset(current.layout.type, count) }))
-    setStep('upload')
+    setStep('editor')
   }
 
   async function readFiles(fileList: FileList | null, mode: 'replace-all' | 'append') {
@@ -215,6 +215,7 @@ export default function App() {
   }
   function chooseEmptySlot(index: number) {
     setTargetIndex(index); setPlacementId(null)
+    if (!photos.length) { editorInputRef.current?.click(); return }
     if (window.innerWidth <= 900) document.getElementById('photo-library')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
   }
   function removeFromLibrary(id: string) {
@@ -346,14 +347,14 @@ export default function App() {
             onClick={() => setStep(step === 'layout' ? 'home' : step === 'count' ? 'layout' : 'count')}
           >← 이전</button>
           <div className="progress-row">
-            {['layout', 'count', 'upload'].map((item, index) => (
-              <span key={item} className={item === step ? 'active' : ['layout', 'count', 'upload'].indexOf(step) > index ? 'done' : ''} />
+            {['layout', 'count'].map((item, index) => (
+              <span key={item} className={item === step ? 'active' : ['layout', 'count'].indexOf(step) > index ? 'done' : ''} />
             ))}
           </div>
 
           {step === 'layout' && (
             <div className="flow-content">
-              <p className="step-label">1 / 3</p>
+              <p className="step-label">1 / 2</p>
               <h2>어떤 모양으로 만들까요?</h2>
               <p className="step-desc">사진을 넣은 뒤에도 바꿀 수 있어요.</p>
               <div className="layout-cards">
@@ -373,7 +374,7 @@ export default function App() {
 
           {step === 'count' && (
             <div className="flow-content compact-flow">
-              <p className="step-label">2 / 3</p>
+              <p className="step-label">2 / 2</p>
               <h2>사진을 몇 장 넣을까요?</h2>
               <p className="step-desc">작은 액자일수록 사진을 적게 넣으면 얼굴이 잘 보여요.</p>
               <p className="print-note">그리드 추천 · A5 1~4장 / A4 4~6장 / A3 6~12장</p>
@@ -393,33 +394,7 @@ export default function App() {
             </div>
           )}
 
-          {step === 'upload' && (
-            <div className="flow-content compact-flow">
-              <p className="step-label">3 / 3</p>
-              <h2>사진을 골라주세요</h2>
-              <p className="step-desc">사진은 보관함에만 추가돼요. {config.layout.photoCount}칸에 원하는 사진을 직접 넣어주세요.</p>
-              <button type="button" className="upload-card" onClick={() => uploadInputRef.current?.click()}>
-                <span className="upload-icon">＋</span>
-                <strong>사진 선택하기</strong>
-                <span>JPG · PNG · WEBP</span>
-              </button>
-              <input
-                ref={uploadInputRef}
-                hidden
-                type="file"
-                accept="image/*"
-                multiple
-                onChange={(event) => {
-                  void readFiles(event.target.files, 'replace-all')
-                  event.currentTarget.value = ''
-                }}
-              />
-              <div className="privacy-card">
-                <span>🔒</span>
-                <div><strong>사진은 기기 안에서만 처리돼요.</strong><p>서버 업로드나 회원가입 없이 바로 만들 수 있어요.</p></div>
-              </div>
-            </div>
-          )}
+
         </section>
       )}
 
@@ -483,6 +458,7 @@ export default function App() {
           </div>
 
           <aside className="control-panel">
+            <ScenePreview config={config} photos={arranged} />
             <section className="control-section">
               <div className="control-title"><strong>포토테이블 액자용</strong></div>
               <p className="print-note">흰 배경 · 인쇄 그림자 없음 · 좁은 간격 · 액자 안전 여백</p>
@@ -540,21 +516,17 @@ export default function App() {
               <div className="control-block">
                 <div className="control-title"><strong>사진 간격</strong></div>
                 <label className="gap-slider">
-                  <span>간격 <output>{(gapRatio(config.gap) * Math.min(paper(config).widthMm, paper(config).heightMm)).toFixed(1)} mm</output></span>
-                  <input aria-label="사진 간격" type="range" min="0" max="26" step="1" value={Math.round(gapRatio(config.gap) * 1000)} onPointerDown={() => history.beginGroup()} onPointerUp={() => history.endGroup()} onPointerCancel={() => history.endGroup()} onBlur={() => history.endGroup()} onChange={event => setConfig(c => ({ ...c, gap: Number(event.target.value) / 1000 }))} />
-                  <span className="print-note">붙이기부터 넓게까지 · 용지 크기에 비례해 적용돼요.</span>
+                  <span>간격 <output>{(effectiveGapRatio(config) * Math.min(paper(config).widthMm, paper(config).heightMm)).toFixed(1)} mm</output></span>
+                  <input aria-label="사진 간격" type="range" min="0" max={Math.floor(maxGapRatio(config) * 1000)} step="1" value={Math.round(effectiveGapRatio(config) * 1000)} onPointerDown={() => history.beginGroup()} onPointerUp={() => history.endGroup()} onPointerCancel={() => history.endGroup()} onBlur={() => history.endGroup()} onChange={event => setConfig(c => ({ ...c, gap: Number(event.target.value) / 1000 }))} />
+                  <span className="print-note">붙이기부터 넓게까지 · 용지 크기에 비례해 적용돼요. 작은 하트 칸은 간격 범위가 자동 조정돼요.</span>
                 </label>
               </div>
 
-              <div className="shadow-control">
-                <div><strong>그림자</strong><span>사진을 살짝 띄워줘요</span></div>
-                <button
-                  type="button"
-                  className={`switch ${config.shadow === 'on' ? 'on' : ''}`}
-                  onClick={() => setConfig((current) => ({ ...current, shadow: current.shadow === 'on' ? 'off' : 'on' }))}
-                  aria-label="그림자 켜기 또는 끄기"
-                ><i /></button>
-              </div>
+              <label className="gap-slider">
+                <span>인쇄 그림자 <output>{Math.round(shadowStrength(config.shadow) * 100)}%</output></span>
+                <input aria-label="그림자 강도" type="range" min="0" max="100" step="1" value={Math.round(shadowStrength(config.shadow)*100)} onPointerDown={() => history.beginGroup()} onPointerUp={() => history.endGroup()} onPointerCancel={() => history.endGroup()} onBlur={() => history.endGroup()} onChange={event => setConfig(c => ({ ...c, shadow: Number(event.target.value) }))} />
+                <span className="print-note">0%는 그림자 없음 · 인쇄 파일에도 적용돼요.</span>
+              </label>
             </section>
 
             <section className="advanced-section">

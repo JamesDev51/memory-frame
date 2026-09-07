@@ -23,10 +23,20 @@ export function safeMarginMm(config: EditorConfig) {
   return Math.max(overlap, short * ({ minimal: .04, normal: .09, wide: .15 }[config.mat ?? 'normal']))
 }
 export function gapRatio(gap: EditorConfig['gap']) {
-  return typeof gap === 'number' ? Math.max(0, Math.min(.026, Number.isFinite(gap) ? gap : .006)) : ({ narrow: .006, normal: .014, wide: .026 }[gap])
+  return typeof gap === 'number' ? Math.max(0, Math.min(.08, Number.isFinite(gap) ? gap : .006)) : ({ narrow: .006, normal: .014, wide: .026 }[gap])
 }
+export function shadowStrength(shadow: EditorConfig['shadow']) {
+  return typeof shadow === 'number' ? Math.max(0, Math.min(1, Number.isFinite(shadow) ? shadow / 100 : 0)) : shadow === 'on' ? .5 : 0
+}
+export function maxGapRatio(config: EditorConfig) {
+  const page = paper(config), short = Math.min(page.widthMm, page.heightMm)
+  const w = page.widthMm - 2 * safeMarginMm(config), h = page.heightMm - 2 * safeMarginMm(config)
+  if (config.layout.type === 'heart') return Math.min(.08, Math.min(w,h) / short * Math.min(...getHeartSlots(config.layout.photoCount).map(s => Math.min(s.width,s.height))) * .7)
+  return Math.min(.08, .65 * Math.min(config.layout.columns > 1 ? w / (config.layout.columns - 1) : Infinity, config.layout.rows > 1 ? h / (config.layout.rows - 1) : Infinity) / short)
+}
+export function effectiveGapRatio(config: EditorConfig) { return Math.min(gapRatio(config.gap), maxGapRatio(config)) }
 export function slotsFor(config: EditorConfig, width: number, height: number): Rect[] {
-  const gap = Math.min(width, height) * gapRatio(config.gap)
+  const gap = Math.min(width, height) * effectiveGapRatio(config)
   const page = paper(config)
   const margin = safeMarginMm(config) * width / page.widthMm
   const availableW = width - 2 * margin, availableH = height - 2 * margin
