@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type SetStateAction } from 'react'
 import type { EditorConfig, PhotoItem } from '../types/editor'
+import type { Placement } from '../utils/placements'
 import { updateHistory, undoHistory, redoHistory, type Snapshot, type History } from '../utils/history'
 export function useEditorHistory(initialConfig: EditorConfig) {
   const [history, setHistory] = useState<History>({ past: [], present: { config: initialConfig, photos: [], placements: Array(initialConfig.layout.photoCount).fill(null) }, future: [] })
@@ -19,7 +20,8 @@ export function useEditorHistory(initialConfig: EditorConfig) {
   }, [])
   const setConfig = useCallback((v: SetStateAction<EditorConfig>) => update('config', v), [update])
   const setPhotos = useCallback((v: SetStateAction<PhotoItem[]>) => update('photos', v), [update])
-  const setPlacements = useCallback((v: SetStateAction<(string | null)[]>) => update('placements', v), [update])
+  const setPlacements = useCallback((v: SetStateAction<(Placement | null)[]>) => update('placements', v), [update])
+  function setSnapshot(value: Snapshot | ((s: Snapshot) => Snapshot), clear = false) { endGroup(); setHistory(h => ({ past: clear ? [] : [...h.past,h.present].slice(-40), present: typeof value === 'function' ? value(h.present) : value, future: [] })) }
   function undo() { setHistory(undoHistory) }
   function redo() { setHistory(redoHistory) }
   function beginGroup() { group.current = true; groupSaved.current = false }
@@ -34,5 +36,5 @@ export function useEditorHistory(initialConfig: EditorConfig) {
     const retained = new Set([...history.past, history.present, ...history.future].flatMap(s => s.photos.map(p => p.url)))
     for (const url of urls.current) if (!retained.has(url)) { URL.revokeObjectURL(url); urls.current.delete(url) }
   }, [history])
-  return { ...history.present, setConfig, setPhotos, setPlacements, undo, redo, canUndo: !!history.past.length, canRedo: !!history.future.length, beginGroup, endGroup, reset, register }
+  return { snapshot: history.present, setSnapshot, ...history.present, setConfig, setPhotos, setPlacements, undo, redo, canUndo: !!history.past.length, canRedo: !!history.future.length, beginGroup, endGroup, reset, register }
 }

@@ -50,29 +50,37 @@ export function slotsFor(config: EditorConfig, width: number, height: number): R
   }
   const { rows, columns } = config.layout
   // Fill the printable rectangle, keeping equal gutters and equal outer margins.
-  const cellW = (availableW - gap * (columns - 1)) / columns
-  const cellH = (availableH - gap * (rows - 1)) / rows
+  let cellW = (availableW - gap * (columns - 1)) / columns
+  let cellH = (availableH - gap * (rows - 1)) / rows
+  if (config.photoStyle === 'polaroid') {
+    cellW = Math.min(cellW, cellH / cardRatio(config)); cellH = cellW * cardRatio(config)
+  }
+  const originX = (width - (cellW * columns + gap * (columns - 1))) / 2
+  const originY = (height - (cellH * rows + gap * (rows - 1))) / 2
   return Array.from({ length: config.layout.photoCount }, (_, i) => ({
-    x: margin + i % columns * (cellW + gap),
-    y: margin + Math.floor(i / columns) * (cellH + gap), width: cellW, height: cellH,
+    x: originX + i % columns * (cellW + gap),
+    y: originY + Math.floor(i / columns) * (cellH + gap), width: cellW, height: cellH,
   }))
 }
+export function cardRatio(config: EditorConfig) { return 1 - (config.cardBorder ?? .0482) + (config.cardBottom ?? .211) }
 export function cardRect(config: EditorConfig, slot: Rect): Rect {
   if (config.photoStyle !== 'polaroid') return slot
-  const width = Math.min(slot.width, slot.height / 1.22), height = width * 1.22
+  const width = Math.min(slot.width, slot.height / cardRatio(config)), height = width * cardRatio(config)
   return {x: slot.x + (slot.width-width)/2, y: slot.y + (slot.height-height)/2, width, height}
 }
 export function photoRect(config: EditorConfig, slot: Rect): Rect {
   const card = cardRect(config, slot)
   if (config.photoStyle !== 'polaroid') return card
-  const inset = card.width * .06, side = card.width * .88
+  const inset = card.width * (config.cardBorder ?? .0482), side = card.width - 2 * inset
   return {x:card.x+inset,y:card.y+inset,width:side,height:side}
 }
 export function photoPlacement(photo: PhotoItem, width: number, height: number) {
   const contain = photo.fit === 'contain'
-  const base = (contain ? Math.min : Math.max)(width / photo.naturalWidth, height / photo.naturalHeight)
+  const rotated = photo.rotation === 90 || photo.rotation === 270
+  const naturalW = rotated ? photo.naturalHeight : photo.naturalWidth, naturalH = rotated ? photo.naturalWidth : photo.naturalHeight
+  const base = (contain ? Math.min : Math.max)(width / naturalW, height / naturalH)
   const scale = base * (contain ? 1 : Math.max(1, photo.scale))
-  const w = photo.naturalWidth * scale, h = photo.naturalHeight * scale
+  const w = naturalW * scale, h = naturalH * scale
   const maxX = Math.max(0, (w - width) / 2), maxY = Math.max(0, (h - height) / 2)
   const clamp = (n: number) => Math.max(-1, Math.min(1, n))
   return { x: (width - w) / 2 + (contain ? 0 : clamp(photo.offsetX) * maxX), y: (height - h) / 2 + (contain ? 0 : clamp(photo.offsetY) * maxY), width: w, height: h, scale, maxX, maxY }

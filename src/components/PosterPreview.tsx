@@ -1,14 +1,16 @@
 import { Fragment, useEffect, useRef, useState } from 'react'
-import { paper, slotsFor, cardRect } from '../utils/geometry'
+import { paper, slotsFor, cardRect, photoRect, photoPlacement } from '../utils/geometry'
 import { renderToCanvas } from '../utils/render'
 import type { EditorConfig, PhotoItem } from '../types/editor'
 interface Props {
+  onAdjust?: (patch: Partial<PhotoItem>) => void; onBegin?: () => void; onEnd?: () => void
   config: EditorConfig; photos: (PhotoItem | null)[]; selectedPhotoId?: string | null
   onSelectPhoto?: (id: string) => void
   onAddPhoto?: (index: number) => void; onRemove?: (index: number) => void; interactive?: boolean
   placementId?: string | null; onPlace?: (id: string, index: number) => void; targetIndex?: number | null
 }
-export default function PosterPreview({ config, photos, selectedPhotoId, onSelectPhoto, onAddPhoto, onRemove, placementId, onPlace, targetIndex, interactive = true }: Props) {
+export default function PosterPreview({ config, photos, selectedPhotoId, onSelectPhoto, onAddPhoto, onRemove, placementId, onPlace, targetIndex, interactive = true, onAdjust, onBegin, onEnd }: Props) {
+  const pan = useRef<{x:number;y:number;ox:number;oy:number;maxX:number;maxY:number}|null>(null)
   const ref = useRef<HTMLCanvasElement>(null)
   const [dropIndex, setDropIndex] = useState<number | null>(null)
   const [error, setError] = useState(false)
@@ -36,7 +38,16 @@ export default function PosterPreview({ config, photos, selectedPhotoId, onSelec
         className={`tile-hit ${photo ? '' : 'empty-photo'} ${photo?.id === selectedPhotoId ? 'selected-photo' : ''} ${placementId ? 'placement-target' : ''} ${dropIndex === i || targetIndex === i ? 'drop-target' : ''}`}
         style={{ left: `${slot.x / width * 100}%`, top: `${slot.y / height * 100}%`, width: `${slot.width / width * 100}%`, height: `${slot.height / height * 100}%` }}
         aria-label={placementId ? `${i + 1}번 칸에 사진 배치` : photo ? `${i + 1}번째 사진 편집` : `${i + 1}번 빈칸 채우기`}
-        onClick={() => placementId ? onPlace?.(placementId, i) : photo ? onSelectPhoto?.(photo.id) : onAddPhoto?.(i)} draggable={!!photo}
+        onClick={() => placementId ? onPlace?.(placementId, i) : photo ? onSelectPhoto?.(photo.id) : onAddPhoto?.(i)} draggable={!!photo && photo.id !== selectedPhotoId}
+        onPointerDown={e=>{
+          if(!photo || photo.id!==selectedPhotoId || placementId || photo.fit==='contain')return
+          e.currentTarget.setPointerCapture(e.pointerId);onBegin?.()
+          const box=e.currentTarget.getBoundingClientRect(), picture=photoRect(config,rawSlot)
+          const p=photoPlacement(photo,picture.width*box.width/slot.width,picture.height*box.height/slot.height)
+          pan.current={x:e.clientX,y:e.clientY,ox:photo.offsetX,oy:photo.offsetY,maxX:p.maxX,maxY:p.maxY}
+        }}
+        onPointerMove={e=>{if(!pan.current)return;const p=pan.current;onAdjust?.({offsetX:p.maxX?Math.max(-1,Math.min(1,p.ox+(e.clientX-p.x)/p.maxX)):0,offsetY:p.maxY?Math.max(-1,Math.min(1,p.oy+(e.clientY-p.y)/p.maxY)):0})}}
+        onPointerUp={()=>{pan.current=null;onEnd?.()}} onPointerCancel={()=>{pan.current=null;onEnd?.()}}
         onDragStart={e => { if (photo) e.dataTransfer.setData('application/x-memory-frame-photo', photo.id); e.dataTransfer.effectAllowed = 'move' }}
         onDragOver={e => { if (e.dataTransfer.types.includes('application/x-memory-frame-photo')) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setDropIndex(i) } }}
         onDragLeave={() => setDropIndex(null)} onDrop={e => {

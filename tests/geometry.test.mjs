@@ -75,27 +75,32 @@ test('history is bounded and a new edit after undo clears the redo branch', () =
   assert.equal(redoHistory(h).present.config.n,100)
 })
 
-const { resizePlacements, placePhoto, fillEmpty, arrangedPhotos } = await import(pathToFileURL(path.join(root, 'utils/placements.js')))
-test('placing library photos replaces one slot without losing the old library item', () => {
-  const photos = ['a', 'b', 'c', 'd'].map(id => ({ id, url: `blob:${id}` }))
-  assert.deepEqual(placePhoto(['a','b',null], 'c', 1), ['a','c',null])
-  assert.equal(photos.length,4)
-  assert.deepEqual(placePhoto(['a','b',null], 'a', 1), ['b','a',null])
-  assert.deepEqual(placePhoto(['a','b',null], 'a', 2), [null,'b','a'])
+const placementsPath = path.join(root, 'utils/placements.js')
+await fs.writeFile(placementsPath, (await fs.readFile(placementsPath, 'utf8')).replace("'../presets/layouts'", "'../presets/layouts.js'"))
+const { resizePlacements, placePhoto, fillEmpty, arrangedPhotos, switchLayoutSnapshot } = await import(pathToFileURL(path.join(root, 'utils/placements.js')))
+test('library placement duplicates originals while slot movement swaps edits', () => {
+  let slots=placePhoto([null,null,null],'a',0)
+  slots=placePhoto(slots,'a',1)
+  assert.equal(slots[0].photoId,'a');assert.equal(slots[1].photoId,'a');assert.notEqual(slots[0].id,slots[1].id)
+  slots[0]={...slots[0],scale:2,rotation:90};const first=slots[0],second=slots[1]
+  slots=placePhoto(slots,first.id,1)
+  assert.deepEqual(slots,[second,first,null])
+  assert.equal(slots[0].scale,1);assert.equal(slots[1].scale,2)
 })
-test('multiple add fills empty slots only, retaining all excess images', () => {
-  const photos = ['a','b','c','d','e','f'].map(id => ({ id }))
-  assert.deepEqual(fillEmpty(['a',null,'c',null],photos), ['a','b','c','d'])
-  assert.equal(photos.length,6)
-  assert.deepEqual(fillEmpty(['a','b','c','d'],photos), ['a','b','c','d'])
+test('fill button preserves filled and hidden slots, uses unused photos once',()=>{
+  const photos=['a','b','c','d'].map(id=>({id}))
+  let slots=placePhoto([null,null,null,null],'a',0)
+  const first=slots[0]
+  slots=fillEmpty(slots,photos,3)
+  assert.deepEqual(slots.map(p=>p?.photoId??null),['a','b','c',null]);assert.equal(slots[0],first)
 })
-test('shrinking layouts never deletes library photos; render keeps slot holes', () => {
-  const photos = ['a','b','c','d'].map(id => ({id}))
-  const slots = resizePlacements(['a',null,'b','c'],2)
-  assert.deepEqual(slots,['a',null])
-  assert.deepEqual(arrangedPhotos([null,'b',null,'a'],photos),[null,photos[1],null,photos[0]])
-  assert.deepEqual(resizePlacements(slots,4),['a',null,null,null])
-  assert.deepEqual(arrangedPhotos(['missing'],photos),[null])
+test('shrinking and growing restores hidden placement edits and retains holes',()=>{
+  let slots=placePhoto([null,null,null,null],'a',3);slots[3].rotation=270
+  const smaller=resizePlacements(slots,2)
+  assert.equal(smaller.length,4)
+  assert.deepEqual(resizePlacements(smaller,4),slots)
+  const arranged=arrangedPhotos(slots,[{id:'a',url:'blob:a'}])
+  assert.equal(arranged[0],null);assert.equal(arranged[3].url,'blob:a');assert.equal(arranged[3].rotation,270)
 })
 test('undo restores the library and placements atomically', () => {
   const original = { past: [], present: { config:{}, photos:[{id:'a',url:'blob:a'}], placements:['a',null] }, future:[] }
@@ -158,4 +163,29 @@ test('polaroid cards and square photo windows stay inside slots with deeper bott
       assert.ok(card.y+card.height-photo.y-photo.height>photo.y-card.y)
     }
   }
+})
+
+test('rotated portrait and landscape images cover or contain rectangular windows',()=>{
+ for(const rotation of [0,90,180,270])for(const fit of ['cover','contain'])for(const [w,h]of[[300,500],[500,300]])for(const [nw,nh]of[[600,1800],[1800,600]]) {
+  const p=photoPlacement({naturalWidth:nw,naturalHeight:nh,scale:3,offsetX:1,offsetY:-1,rotation,fit},w,h)
+  if(fit==='cover')assert.ok(p.x<=1e-6&&p.y<=1e-6&&p.x+p.width>=w-1e-6&&p.y+p.height>=h-1e-6)
+  else assert.ok(p.x>=-1e-6&&p.y>=-1e-6&&p.x+p.width<=w+1e-6&&p.y+p.height<=h+1e-6)
+ }
+})
+test('polaroid visible card gutters match horizontally and vertically',()=>{
+ for(const count of [4,6,9,12,20])for(const orientation of ['portrait','landscape'])for(const gap of [0,.02,.08])for(const cardBorder of [.02,.0482,.1])for(const cardBottom of [.1,.211,.3]) {
+  const config={...base,layout:getLayoutPreset('grid',count),printSize:'A4',orientation,gap,photoStyle:'polaroid',cardBorder,cardBottom}
+  const page=paper(config),cards=slotsFor(config,page.width,page.height).map(s=>cardRect(config,s)),a=cards[0],b=cards[1],c=cards[config.layout.columns]
+  assert.ok(Math.abs((b.x-a.x-a.width)-(c.y-a.y-a.height))<1e-6)
+  assert.ok(a.x>=0&&a.y>=0)
+ }
+})
+
+test('switching grid and heart restores each layout and its independent placements',()=>{
+ const placements=placePhoto(Array(20).fill(null),'a',19);placements[19].rotation=90
+ const initial={config:{...base,layout:getLayoutPreset('grid',20)},photos:[],placements}
+ let s=switchLayoutSnapshot(initial,'heart');assert.equal(s.placements.filter(Boolean).length,0)
+ s={...s,config:{...s.config,layout:getLayoutPreset('heart',9)},placements:placePhoto(s.placements,'b',0)}
+ s=switchLayoutSnapshot(s,'grid');assert.equal(s.config.layout.photoCount,20);assert.equal(s.placements[19].rotation,90)
+ s=switchLayoutSnapshot(s,'heart');assert.equal(s.config.layout.photoCount,9);assert.equal(s.placements[0].photoId,'b')
 })

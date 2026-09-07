@@ -26,11 +26,11 @@ export function drawCard(ctx: CanvasRenderingContext2D, rect: Rect, config: Edit
   const strength = shadowStrength(config.shadow)
   if (strength > 0) {
     ctx.shadowColor = `rgba(25,22,20,${strength * .55})`
-    ctx.shadowBlur = width * (.02 + strength * .07)
-    ctx.shadowOffsetX = width * strength * .008
-    ctx.shadowOffsetY = width * strength * .04
+    ctx.shadowBlur = width * .00723
+    ctx.shadowOffsetX = 0
+    ctx.shadowOffsetY = width * .00602
   }
-  const background = config.photoStyle === 'polaroid' ? '#ffffff' : matColor(config)
+  const background = config.photoStyle === 'polaroid' ? (config.cardColor ?? '#f7f7f7') : matColor(config)
   ctx.fillStyle = config.colorMode === 'all-gray' ? gray(background) : background
   ctx.fillRect(x,y,width,height)
   ctx.restore()
@@ -41,12 +41,18 @@ export function drawPhoto(ctx: CanvasRenderingContext2D, image: HTMLImageElement
   ctx.save()
   ctx.beginPath(); ctx.rect(x, y, width, height); ctx.clip()
   const p = photoPlacement(photo, width, height)
+  const paint = (target: CanvasRenderingContext2D, ox: number, oy: number) => {
+    target.save(); target.translate(ox + p.x + p.width/2, oy + p.y + p.height/2)
+    target.rotate((photo.rotation || 0) * Math.PI / 180)
+    const w = photo.naturalWidth*p.scale, h = photo.naturalHeight*p.scale
+    target.drawImage(image, -w/2, -h/2, w, h); target.restore()
+  }
   // CSS Canvas filter is applied identically to the preview and exported photos.
   if (config.colorMode !== 'color' && !Reflect.has(ctx, 'filter')) {
     const tile = document.createElement('canvas')
     tile.width = Math.max(1, Math.ceil(width)); tile.height = Math.max(1, Math.ceil(height))
     const tileCtx = tile.getContext('2d')!
-    tileCtx.drawImage(image, p.x, p.y, p.width, p.height)
+    paint(tileCtx, 0, 0)
     const pixels = tileCtx.getImageData(0, 0, tile.width, tile.height)
     for (let i = 0; i < pixels.data.length; i += 4) {
       const g = Math.round(pixels.data[i] * .2126 + pixels.data[i + 1] * .7152 + pixels.data[i + 2] * .0722)
@@ -57,7 +63,7 @@ export function drawPhoto(ctx: CanvasRenderingContext2D, image: HTMLImageElement
     tile.width = 0; tile.height = 0
   } else {
     ctx.filter = config.colorMode === 'color' ? 'none' : 'grayscale(1)'
-    ctx.drawImage(image, x + p.x, y + p.y, p.width, p.height)
+    paint(ctx, x, y)
   }
   ctx.restore()
 }
@@ -119,4 +125,13 @@ export async function exportPdf(config: EditorConfig, photos: (PhotoItem | null)
     pdf.addImage(bytes, 'JPEG', 0, 0, page.widthMm, page.heightMm)
     pdf.save(`memory-frame-${config.printSize}-${dpi}dpi-${Date.now()}.pdf`)
   } finally { canvas.width = 0; canvas.height = 0 }
+}
+
+export async function exportJpg(config: EditorConfig, photos: (PhotoItem | null)[], dpi = 300) {
+  const page = paper(config,dpi), canvas = await renderToCanvas(config,photos,page.width,page.height)
+  try {
+    const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve,'image/jpeg',.96))
+    if (!blob) throw new Error('JPG 저장 실패')
+    downloadBlob(blob,`memory-frame-${config.printSize}-${dpi}dpi-${Date.now()}.jpg`)
+  } finally { canvas.width=0; canvas.height=0 }
 }

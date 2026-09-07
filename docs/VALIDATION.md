@@ -72,3 +72,13 @@ Implementation commit c9d4060c8b3cb7819fefb7d4cb7a45307f917ef7:
 - 실제 renderToCanvas 소스를 Node native Canvas로 실행: 600×849 빈 카드 미리보기에서 그림자0→100 변경 시 어두워지는 픽셀102,588개. 빈칸 출력은 균일 배경으로 남음. 4장 폴라로이드 결과 PNG를 열어 시각 확인. 이 검사는 브라우저 실행이 아닌 렌더러 검사다.
 - Dearly 공개 페이지 텍스트 확인: 폴라로이드 액자, 보관함/칸 편집, A3/A5, 인쇄 후 그림자 조정 안내. 브라우저 화면 접속은 timeout. 정확한 간격/테두리/그림자 수치는 확인하지 않았고 복제하지 않음.
 - 실제 사이트/모바일 브라우저 UI 검수는 미완료.
+
+## V2 validation — 2026-09-07
+
+- Automated suite: 24 passing tests. Grid/heart count, bounds, overlap, frame safety, photo cover/contain, rotated portrait/landscape, visible polaroid gutters, independent duplicates, swap edits, hidden slots, per-layout state restoration, grouped undo/redo.
+- Persistence: fake-indexeddb exercises the production repository functions (actual Blob/File structured cloning), portable backup round-trip and invalid input rejection. Mounted React hooks verify rename, duplicate, restore, last-photo deletion, project deletion, gesture undo, quota failure retaining edits and a successful retry. This is not a real-browser IndexedDB test.
+- Native Canvas QA executes compiled production geometry/render functions through a DOM/Image adapter. Inspected four rotations in one polaroid grid and empty export excluding cards. Generated A5/A4/A3/A2 PDFs at 150 DPI: pages 148×210 / 210×297 / 297×420 / 420×594 mm, embedded pixels 874×1240 / 1240×1754 / 1754×2480 / 2480×3508. PNG/JPG generated through actual export functions. Native image loader adapted only at its HTMLImageElement boundary.
+- TypeScript and Vite production build passed.
+- Browser QA blocked in this environment: supervised local preview starts, but Cloud Browser navigation reports ERR_BLOCKED_BY_CLIENT. Production URL browser navigation timed out. No claim of completed laptop/mobile DOM interaction, fresh-browser restore, real browser download, or screenshot QA.
+- Actual physical print and frame fitting remain unverified. Device-local storage is not cloud synchronization; backup files include originals and should be retained by users before clearing browser data.
+- React test renderer emits its deprecation advisory; it is a development-only dependency, not shipped in the production bundle.

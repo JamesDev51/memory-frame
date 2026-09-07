@@ -1,5 +1,6 @@
+import type { Placement } from './placements'
 import type { EditorConfig, PhotoItem } from '../types/editor'
-export type Snapshot = { config: EditorConfig; photos: PhotoItem[]; placements: (string | null)[] }
+export type Snapshot = { config: EditorConfig; photos: PhotoItem[]; placements: (Placement | null)[]; layouts?: Partial<Record<'grid' | 'heart', { layout: EditorConfig['layout']; placements: (Placement | null)[] }>> }
 export type History = { past: Snapshot[]; present: Snapshot; future: Snapshot[] }
 export function updateHistory<K extends keyof Snapshot>(h: History, key: K, next: Snapshot[K], checkpoint: boolean): History {
   if (next === h.present[key]) return h

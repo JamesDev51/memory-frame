@@ -46,6 +46,9 @@ export interface EditorConfig {
   frameId: string
   frameVariantId: string
   shadow: ShadowMode | number
+  cardColor?: '#ffffff' | '#f7f7f7'
+  cardBorder?: number
+  cardBottom?: number
   photoStyle?: 'plain' | 'polaroid'
   printSize: 'A5' | 'A4' | 'A3' | 'A2' | '5x7' | '8x10' | 'custom'
   customWidthMm: number

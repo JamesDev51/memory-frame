@@ -1,16 +1,18 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useProjects } from './hooks/useProjects'
+import ProjectManager from './components/ProjectManager'
 import { useEditorHistory } from './hooks/useEditorHistory'
 import { paper, slotsFor, photoDpis, effectiveGapRatio, maxGapRatio, shadowStrength, photoRect } from './utils/geometry'
 import ScenePreview from './components/ScenePreview'
 import PhotoLibrary from './components/PhotoLibrary'
 import FramePreview, { type FrameFinish } from './components/FramePreview'
-import { arrangedPhotos, placePhoto, resizePlacements } from './utils/placements'
+import { arrangedPhotos, placePhoto, resizePlacements, fillEmpty, switchLayoutSnapshot } from './utils/placements'
 import PosterPreview from './components/PosterPreview'
 import PhotoAdjuster from './components/PhotoAdjuster'
 import { framePresets, getFramePreset } from './presets/frames'
 import { getHeartSlots, getLayoutPreset, PHOTO_COUNTS, HEART_PHOTO_COUNTS } from './presets/layouts'
 import type { EditorConfig, LayoutType, PhotoItem } from './types/editor'
-import { exportPdf, exportPng, PRINT_SIZES, type PrintSize } from './utils/render'
+import { exportPdf, exportPng, exportJpg, PRINT_SIZES, type PrintSize } from './utils/render'
 
 type Step = 'home' | 'layout' | 'count' | 'editor'
 
@@ -74,22 +76,23 @@ function LayoutThumbnail({ type }: { type: LayoutType }) {
 }
 
 export default function App() {
-  const [step, setStep] = useState<Step>('home')
+  const [step, setStep] = useState<Step>('editor')
   const history = useEditorHistory(initialConfig)
   const { config, photos, placements, setConfig, setPhotos, setPlacements } = history
-  const arranged = useMemo(() => arrangedPhotos(placements, photos), [placements, photos])
+  const arranged = useMemo(() => arrangedPhotos(placements.slice(0,config.layout.photoCount), photos), [placements, photos, config.layout.photoCount])
   const placedCount = arranged.filter(Boolean).length
   const [placementId, setPlacementId] = useState<string | null>(null)
   const [targetIndex, setTargetIndex] = useState<number | null>(null)
   const [frameFinish, setFrameFinish] = useState<FrameFinish | 'paper'>('black')
   const previewRef = useRef<HTMLDivElement>(null)
-  const [pendingExport, setPendingExport] = useState<'png' | 'pdf' | null>(null)
+  const [pendingExport, setPendingExport] = useState<'png' | 'jpg' | 'pdf' | null>(null)
   const [selectedPhotoId, setSelectedPhotoId] = useState<string | null>(null)
   const [saveOpen, setSaveOpen] = useState(false)
   const [exportDpi, setExportDpi] = useState(300)
   const [exportError, setExportError] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [toast, setToast] = useState<string | null>(null)
+  const manager = useProjects(history.snapshot, snapshot => { snapshot.photos.forEach(p => history.register(p.url)); history.setSnapshot(snapshot,true); setSelectedPhotoId(null);setPlacementId(null);setTargetIndex(null);setStep('editor') })
   const editorInputRef = useRef<HTMLInputElement>(null)
 
 
@@ -126,10 +129,10 @@ export default function App() {
   }, [saveOpen])
 
   const selectedPhoto = useMemo(
-    () => photos.find((photo) => photo.id === selectedPhotoId) ?? null,
-    [photos, selectedPhotoId],
+    () => arranged.find((photo) => photo?.id === selectedPhotoId) ?? null,
+    [arranged, selectedPhotoId],
   )
-  const selectedIndex = selectedPhoto ? placements.indexOf(selectedPhoto.id) : -1
+  const selectedIndex = selectedPhoto ? placements.findIndex(p => p?.id === selectedPhoto.id) : -1
   const currentFrame = getFramePreset(config.frameId)
 
   function chooseLayout(type: LayoutType) {
@@ -149,7 +152,8 @@ export default function App() {
 
   async function readFiles(fileList: FileList | null, mode: 'replace-all' | 'append') {
     if (!fileList?.length) return
-    const files = Array.from(fileList)
+    const files = Array.from(fileList).filter(file=>/^image\/(jpeg|png|webp|gif|avif|bmp)$/.test(file.type))
+    if(!files.length){setToast('JPG, PNG, WEBP 등 지원되는 사진 파일을 선택해주세요.');return}
     setBusy('사진을 준비하고 있어요')
     try {
       const next: PhotoItem[] = []
@@ -185,9 +189,13 @@ export default function App() {
     setConfig(current => ({ ...current, layout: getLayoutPreset(current.layout.type, count) }))
     history.endGroup()
     setPlacementId(null); setTargetIndex(null)
-    if (count < config.layout.photoCount) setToast('줄어든 칸의 사진은 사진관리에 보관했어요.')
+    closePhoto(); if (count < config.layout.photoCount) setToast('숨겨진 칸의 배치를 보관했어요. 개수를 늘리면 다시 나타나요.')
   }
 
+  function switchLayout(type: LayoutType) {
+    if(type===config.layout.type)return
+    history.setSnapshot(s => switchLayoutSnapshot(s,type));closePhoto();setTargetIndex(null);setPlacementId(null)
+  }
   function swapOrientation() {
     if (config.layout.rows === config.layout.columns || config.layout.type === 'heart') return
     setConfig((current) => ({
@@ -202,7 +210,7 @@ export default function App() {
   }
 
   function assignPhoto(id: string, index: number) {
-    if (!photos.some(photo => photo.id === id)) return
+    if (!photos.some(photo => photo.id === id) && !placements.some(p => p?.id === id)) return
     setPlacements(current => placePhoto(current, id, index))
     setPlacementId(null); setTargetIndex(null)
     setToast(`${index + 1}번 칸에 배치했어요.`)
@@ -218,49 +226,29 @@ export default function App() {
     if (window.innerWidth <= 900) document.getElementById('photo-library')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
   }
   function removeFromLibrary(id: string) {
-    if (id === selectedPhotoId) setSelectedPhotoId(null)
-    history.beginGroup()
-    setPlacements(current => current.map(value => value === id ? null : value))
-    setPhotos(current => current.filter(photo => photo.id !== id))
-    history.endGroup()
-    setPlacementId(null); setTargetIndex(null)
-    setToast('보관함에서 지웠어요. 실행 취소로 복원할 수 있어요.')
+    const used=placements.filter(p=>p?.photoId===id).length + Object.values(history.layouts ?? {}).filter(v=>v.layout.type!==config.layout.type).reduce((n,v)=>n+v.placements.filter(p=>p?.photoId===id).length,0)
+    if(used && !window.confirm(`이 사진을 사용한 ${used}칸도 함께 비워져요. 원본을 삭제할까요?`))return
+    history.setSnapshot(s=>({...s,photos:s.photos.filter(p=>p.id!==id),placements:s.placements.map(p=>p?.photoId===id?null:p),layouts:Object.fromEntries(Object.entries(s.layouts??{}).map(([k,v])=>[k,{...v,placements:v.placements.map(p=>p?.photoId===id?null:p)}]))}))
+    closePhoto();setPlacementId(null);setTargetIndex(null);setToast('보관함에서 지웠어요. 실행 취소로 복원할 수 있어요.')
   }
-  function unplaceSelected() {
-    if (!selectedPhotoId) return
-    setPlacements(current => current.map(id => id === selectedPhotoId ? null : id))
-    closePhoto()
-  }
-
+  function unplaceSelected() { setPlacements(current=>current.map(p=>p?.id===selectedPhotoId?null:p));closePhoto() }
   function patchSelectedPhoto(patch: Partial<PhotoItem>) {
-    if (!selectedPhotoId) return
-    setPhotos((current) => current.map((photo) => photo.id === selectedPhotoId ? { ...photo, ...patch } : photo))
+    if(!selectedPhotoId)return
+    setPlacements(current=>current.map(p=>p?.id===selectedPhotoId?{...p,...patch,id:p.id,photoId:p.photoId}:p))
   }
-
   async function replaceSelectedPhoto(file: File) {
-    if (!selectedPhoto) return
+    if(!selectedPhoto)return
     setBusy('사진을 바꾸고 있어요')
-    try {
-      const replacement = await fileToPhoto(file)
-      history.register(replacement.url)
-      setPhotos((current) => current.map((photo) => photo.id === selectedPhoto.id ? { ...replacement, id: selectedPhoto.id } : photo))
-    } catch {
-      setToast('이 사진은 불러올 수 없어요.')
-    } finally {
-      setBusy(null)
-    }
+    try { const photo=await fileToPhoto(file);history.register(photo.url)
+      history.setSnapshot(s=>({...s,photos:[...s.photos,photo],placements:s.placements.map(p=>p?.id===selectedPhotoId?{...p,photoId:photo.id,scale:1,offsetX:0,offsetY:0,rotation:0}:p)}))
+    } catch {setToast('이 사진은 불러올 수 없어요.')}finally{setBusy(null)}
   }
-
-  function deleteSelectedPhoto() {
-    if (!selectedPhoto) return
-    removeFromLibrary(selectedPhoto.id)
-    closePhoto()
-  }
+  function deleteSelectedPhoto() { if(selectedIndex>=0) { const p=placements[selectedIndex];if(p)removeFromLibrary(p.photoId) } }
   function moveSelected(direction: -1 | 1) {
-    if (!selectedPhotoId || selectedIndex < 0) return
-    const target = selectedIndex + direction
-    if (target < 0 || target >= placements.length) return
-    setPlacements(current => placePhoto(current, selectedPhotoId, target))
+    if(!selectedPhotoId||selectedIndex<0)return
+    const target=selectedIndex+direction
+    if(target<0||target>=config.layout.photoCount)return
+    setPlacements(current=>placePhoto(current,selectedPhotoId,target))
   }
 
   function selectFrame(frameId: string) {
@@ -268,10 +256,10 @@ export default function App() {
     setConfig((current) => ({ ...current, frameId, frameVariantId: frame.variants[0].id }))
   }
 
-  function openPhoto(id: string) { history.endGroup(); setPlacementId(null); setTargetIndex(null); history.beginGroup(); setSelectedPhotoId(id); if (window.innerWidth <= 900) previewRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }) }
+  function openPhoto(id: string) { history.endGroup(); setPlacementId(null); setTargetIndex(null); setSelectedPhotoId(id); requestAnimationFrame(()=>{if(window.innerWidth<=900)document.getElementById('photo-editor')?.scrollIntoView({behavior:'smooth',block:'start'});else document.querySelector('.control-panel')?.scrollTo({top:0,behavior:'smooth'})}) }
   function closePhoto() { history.endGroup(); setSelectedPhotoId(null) }
 
-  async function handleExport(format: 'png' | 'pdf', allowEmpty = false) {
+  async function handleExport(format: 'png' | 'jpg' | 'pdf', allowEmpty = false) {
     if (!placedCount) { setExportError('사진을 한 칸 이상 배치해주세요.'); return }
     const empty = config.layout.photoCount - placedCount
     if (empty > 0 && !allowEmpty) { setPendingExport(format); return }
@@ -279,9 +267,11 @@ export default function App() {
     setExportError(null)
     setBusy(`${config.printSize} ${format.toUpperCase()}를 만들고 있어요`)
     try {
+      await manager.flush().catch(() => setToast('자동 저장에 실패했어요. 작업 파일로 백업해주세요.'))
       // Let the busy state paint before allocating a large print canvas.
       await new Promise(resolve => setTimeout(resolve, 50))
       if (format === 'png') await exportPng(config, arranged, exportDpi)
+      else if (format === 'jpg') await exportJpg(config, arranged, exportDpi)
       else await exportPdf(config, arranged, exportDpi)
       setToast('파일 저장을 시작했어요. 다운로드 목록을 확인해주세요.')
     } catch {
@@ -289,16 +279,11 @@ export default function App() {
     } finally { setBusy(null) }
   }
 
-  function resetAll() {
-    const ok = !photos.length || window.confirm('현재 사진과 설정을 모두 지우고 처음으로 돌아갈까요?')
-    if (!ok) return
-    history.reset()
-    setSelectedPhotoId(null)
-    setSaveOpen(false)
-    setExportError(null)
-    setExportDpi(300)
-    setPlacementId(null); setTargetIndex(null); setPendingExport(null)
-    setStep('home')
+  async function resetAll() {
+    if(photos.length && !window.confirm('현재 작업을 저장하고 새 작업을 시작할까요?'))return
+    try{await manager.flush()}catch{setToast('작업을 저장하지 못했어요. 내 작업에서 파일로 백업한 뒤 다시 시도해주세요.');return}
+    manager.newIdentity();history.reset();setSelectedPhotoId(null);setSaveOpen(false);setExportError(null);setExportDpi(300)
+    setPlacementId(null);setTargetIndex(null);setPendingExport(null);setStep('editor')
   }
 
   return (
@@ -309,7 +294,7 @@ export default function App() {
           <span>Memory Frame</span>
         </button>
         {step === 'editor' && (
-          <div className="top-actions"><button type="button" className="soft-button" onClick={() => document.getElementById('photo-library')?.scrollIntoView({ behavior: 'smooth', block: 'center' })}>사진관리</button><button type="button" className="top-save" onClick={() => setSaveOpen(true)}>저장하기</button></div>
+          <div className="top-actions"><span className="save-status" role="status">{manager.status}</span><button type="button" className="soft-button" onClick={()=>void manager.show().catch(()=>{manager.setOpen(true);setToast('작업 목록을 불러오지 못했어요. 작업 파일 백업을 이용해주세요.')})}>내 작업</button><button type="button" className="soft-button" onClick={() => document.getElementById('photo-library')?.scrollIntoView({ behavior: 'smooth', block: 'center' })}>사진관리</button><button type="button" className="top-save" onClick={() => setSaveOpen(true)}>저장하기</button></div>
         )}
       </header>
 
@@ -397,10 +382,10 @@ export default function App() {
       )}
 
       {step === 'editor' && (
-        <section className={`editor-screen ${selectedPhoto ? 'editing-photo' : ''}`} onPointerDownCapture={event => { if (!(event.target as HTMLElement).closest('.photo-adjuster')) history.endGroup() }} onFocusCapture={event => { if (!(event.target as HTMLElement).closest('.photo-adjuster')) history.endGroup() }}>
+        <section className={`editor-screen ${selectedPhoto ? 'editing-photo' : ''}`}>
           <div className="preview-column">
             <div className="editor-heading">
-              <div><p className="step-label">미리보기</p><h2>이미 거의 다 됐어요.</h2></div>
+              <div><p className="step-label">미리보기</p><h2>{placedCount ? `${placedCount} / ${config.layout.photoCount}칸 배치` : '사진을 넣어 시작하세요'}</h2></div>
               <span className="local-badge">🔒 기기에서만 편집 중</span>
             </div>
             <div className="proof-toolbar">
@@ -414,33 +399,19 @@ export default function App() {
                 config={config}
                 photos={arranged}
                 selectedPhotoId={selectedPhotoId}
+                onAdjust={patchSelectedPhoto} onBegin={history.beginGroup} onEnd={history.endGroup}
                 onSelectPhoto={openPhoto}
                 onPlace={assignPhoto}
-                onRemove={index => { const id = placements[index]; setPlacements(current => current.map((value, i) => i === index ? null : value)); if (id === selectedPhotoId) closePhoto(); setToast('칸에서 뺐어요. 사진은 보관함에 남아 있어요.') }}
+                onRemove={index => { const id = placements[index]?.id; setPlacements(current => current.map((value, i) => i === index ? null : value)); if (id === selectedPhotoId) closePhoto(); setToast('칸에서 뺐어요. 사진은 보관함에 남아 있어요.') }}
                 placementId={placementId}
                 targetIndex={targetIndex}
                 onAddPhoto={chooseEmptySlot}
               />
               </FramePreview>
             </div>
-      {selectedPhoto && (
-        <PhotoAdjuster
-          key={selectedPhoto.id}
-          config={config}
-          aspectRatio={(() => { const page = paper(config); const slot = slotsFor(config, page.width, page.height)[selectedIndex]; return slot ? photoRect(config, slot).width / photoRect(config, slot).height : 1 })()}
-          photo={selectedPhoto}
-          index={selectedIndex}
-          total={placements.length}
-          onChange={patchSelectedPhoto}
-          onReplace={(file) => void replaceSelectedPhoto(file)}
-          onDelete={deleteSelectedPhoto}
-          onUnplace={selectedIndex >= 0 ? unplaceSelected : undefined}
-          onMove={moveSelected}
-          onClose={closePhoto}
-        />
-      )}
 
-            <p className="preview-help">{frameFinish === 'paper' ? '사진을 눌러 편집하거나 끌어서 자리를 바꾸세요.' : '액자 외형은 미리보기예요. 저장 파일에는 인쇄할 종이만 담겨요.'}</p>
+
+            <p className="preview-help">{selectedPhoto ? '선택한 사진 안을 끌면 구도가 바뀌어요. 편집을 마치면 칸끼리 교환할 수 있어요.' : frameFinish === 'paper' ? '사진을 눌러 편집하거나 끌어서 자리를 바꾸세요.' : '액자 외형은 미리보기예요. 저장 파일에는 인쇄할 종이만 담겨요.'}</p>
             <div className="history-controls">
               <button type="button" className="soft-button" disabled={!history.canUndo} onClick={() => { history.undo(); setPlacementId(null); setTargetIndex(null) }}>↶ 실행 취소</button>
               <button type="button" className="soft-button" disabled={!history.canRedo} onClick={() => { history.redo(); setPlacementId(null); setTargetIndex(null) }}>↷ 다시 실행</button>
@@ -450,12 +421,29 @@ export default function App() {
 
           <div className="library-column">
             {targetIndex !== null && <p className="placement-message" role="status">{targetIndex + 1}번 칸에 넣을 사진을 골라주세요.<button type="button" onClick={() => setTargetIndex(null)}>취소</button></p>}
-            <PhotoLibrary photos={photos} placements={placements} selectedId={placementId}
-              onAdd={() => editorInputRef.current?.click()} onSelect={selectForPlacement} onEdit={openPhoto} onRemove={removeFromLibrary}
+            <PhotoLibrary photos={photos} placements={placements.slice(0,config.layout.photoCount).map(p=>p?.photoId ?? null)} selectedId={placementId}
+              onAdd={() => editorInputRef.current?.click()} onSelect={selectForPlacement} onFill={() => { setPlacements(current=>fillEmpty(current,photos,config.layout.photoCount)); setToast('미사용 사진으로 빈칸을 채웠어요.') }} onEdit={id => { const p=placements.slice(0,config.layout.photoCount).find(p=>p?.photoId===id); if(p)openPhoto(p.id);else{setPlacementId(id);setToast('사진을 먼저 원하는 칸에 배치해주세요.')} }} onRemove={removeFromLibrary}
               onCancel={() => setPlacementId(null)} />
           </div>
 
           <aside className="control-panel">
+      {selectedPhoto && (
+        <PhotoAdjuster
+          key={selectedPhoto.id}
+          config={config}
+          aspectRatio={(() => { const page = paper(config); const slot = slotsFor(config, page.width, page.height)[selectedIndex]; return slot ? photoRect(config, slot).width / photoRect(config, slot).height : 1 })()}
+          photo={selectedPhoto}
+          index={selectedIndex}
+          total={config.layout.photoCount}
+          onBegin={history.beginGroup} onEnd={history.endGroup}
+          onChange={patchSelectedPhoto}
+          onReplace={(file) => void replaceSelectedPhoto(file)}
+          onDelete={deleteSelectedPhoto}
+          onUnplace={selectedIndex >= 0 ? unplaceSelected : undefined}
+          onMove={moveSelected}
+          onClose={closePhoto}
+        />
+      )}
             <section className="control-section layout-controls"><div className="control-title"><strong>1. 배치와 사진 개수</strong></div>
                 <div className="advanced-body">
                   <span className="mini-label">사진 개수</span>
@@ -475,8 +463,8 @@ export default function App() {
                   <div className="layout-switch-row">
                     <span className="mini-label">모양</span>
                     <div className="segmented">
-                      <button type="button" className={config.layout.type === 'grid' ? 'selected' : ''} onClick={() => setConfig((current) => ({ ...current, layout: getLayoutPreset('grid', current.layout.photoCount) }))}>그리드</button>
-                      <button type="button" className={config.layout.type === 'heart' ? 'selected' : ''} onClick={() => { const count = Math.max(4, config.layout.photoCount); history.beginGroup(); setPlacements(resizePlacements(placements, count)); setConfig(c => ({ ...c, layout: getLayoutPreset('heart', count) })); history.endGroup(); closePhoto() }}>하트</button>
+                      <button type="button" className={config.layout.type === 'grid' ? 'selected' : ''} onClick={() => switchLayout('grid')}>그리드</button>
+                      <button type="button" className={config.layout.type === 'heart' ? 'selected' : ''} onClick={() => switchLayout('heart')}>하트</button>
                     </div>
                   </div>
                 </div>
@@ -484,7 +472,10 @@ export default function App() {
 
             <section className="control-section"><div className="control-title"><strong>2. 사진 스타일</strong></div>
               <div className="segmented"><button type="button" aria-pressed={config.photoStyle !== 'polaroid'} className={config.photoStyle !== 'polaroid' ? 'selected' : ''} onClick={() => setConfig(c => ({ ...c, photoStyle: 'plain' }))}>기본 사진</button><button type="button" aria-pressed={config.photoStyle === 'polaroid'} className={config.photoStyle === 'polaroid' ? 'selected' : ''} onClick={() => setConfig(c => ({ ...c, photoStyle: 'polaroid' }))}>폴라로이드</button></div>
-              <p className="print-note">폴라로이드는 흰 테두리와 넓은 아래 여백을 더해요.</p>
+              <p className="print-note">폴라로이드는 얇은 테두리와 아래 여백을 더해요.</p>
+              {config.photoStyle==='polaroid' && <details className="export-detail"><summary>카드 세부 설정</summary><div className="segmented">{(['#ffffff','#f7f7f7'] as const).map((color,i)=><button type="button" key={color} className={(config.cardColor??'#f7f7f7')===color?'selected':''} onClick={()=>setConfig(c=>({...c,cardColor:color}))}>{i?'옅은 회색':'흰색'}</button>)}</div>
+              <label className="gap-slider">테두리 두께 <output>{((config.cardBorder??.0482)*100).toFixed(1)}%</output><input aria-label="카드 테두리 두께" type="range" min="2" max="10" step=".1" value={(config.cardBorder??.0482)*100} onPointerDown={history.beginGroup} onPointerUp={history.endGroup} onBlur={history.endGroup} onChange={e=>setConfig(c=>({...c,cardBorder:Number(e.target.value)/100}))}/></label>
+              <label className="gap-slider">아래 여백 <output>{((config.cardBottom??.211)*100).toFixed(1)}%</output><input aria-label="카드 아래 여백" type="range" min="10" max="30" step=".1" value={(config.cardBottom??.211)*100} onPointerDown={history.beginGroup} onPointerUp={history.endGroup} onBlur={history.endGroup} onChange={e=>setConfig(c=>({...c,cardBottom:Number(e.target.value)/100}))}/></label><p className="print-note">카드 너비 기준 비율이에요.</p></details>}
             </section>
             <section className="control-section">
               <div className="control-title"><strong>3. 종이 배경</strong><span>인쇄되는 색상과 무늬</span></div>
@@ -628,7 +619,9 @@ export default function App() {
                 </details>
                 {pendingExport && <div className="quality-note warning" role="alert"><p>비어 있는 칸을 남기고 저장할까요?</p><div className="export-buttons"><button type="button" className="soft-button" onClick={() => setPendingExport(null)}>돌아가기</button><button type="button" className="soft-button" onClick={() => void handleExport(pendingExport, true)}>빈칸 포함 저장</button></div></div>}
                 {exportError && <p className="quality-note warning" role="alert">{exportError}</p>}
+                <p className="print-note">{paper(config,exportDpi).width} × {paper(config,exportDpi).height}px · {exportDpi} DPI · {paper(config).widthMm} × {paper(config).heightMm}mm</p>
                 <div className="export-buttons">
+                  <button type="button" className="soft-button" disabled={!placedCount || !!busy} onClick={() => void handleExport('jpg')}>JPG 저장</button>
                   <button type="button" className="soft-button" disabled={!placedCount || !!busy} onClick={() => void handleExport('png')}>PNG 저장</button>
                   <button type="button" className="primary-button" disabled={!placedCount || !!busy} onClick={() => void handleExport('pdf')}>PDF 저장</button>
                 </div>
@@ -639,9 +632,10 @@ export default function App() {
         </div>
       )}
 
-      {busy && (
+      <ProjectManager manager={manager} onError={setToast} />
+      {(busy || !manager.ready) && (
         <div className="busy-overlay" role="status" aria-live="polite">
-          <span className="spinner" /><strong>{busy}</strong><p>잠시만 기다려주세요.</p>
+          <span className="spinner" /><strong>{busy || '저장된 작업을 확인하고 있어요'}</strong><p>잠시만 기다려주세요.</p>
         </div>
       )}
 

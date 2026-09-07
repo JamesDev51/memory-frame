@@ -14,12 +14,14 @@ interface PhotoAdjusterProps {
   onDelete: () => void
   onUnplace?: () => void
   onMove: (direction: -1 | 1) => void
+  onBegin: () => void
+  onEnd: () => void
   onClose: () => void
 }
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value))
 
-export default function PhotoAdjuster({ config, aspectRatio, photo, index, total, onChange, onReplace, onDelete, onUnplace, onMove, onClose }: PhotoAdjusterProps) {
+export default function PhotoAdjuster({ config, aspectRatio, photo, index, total, onChange, onReplace, onDelete, onUnplace, onMove, onClose, onBegin, onEnd }: PhotoAdjusterProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   useEffect(() => {
     let active = true
@@ -38,6 +40,7 @@ export default function PhotoAdjuster({ config, aspectRatio, photo, index, total
 
   function startDrag(event: PointerEvent<HTMLDivElement>) {
     if (photo.fit === 'contain') return
+    onBegin()
     event.currentTarget.setPointerCapture(event.pointerId)
     dragRef.current = { x: event.clientX, y: event.clientY, offsetX: photo.offsetX, offsetY: photo.offsetY }
     setDragging(true)
@@ -54,6 +57,7 @@ export default function PhotoAdjuster({ config, aspectRatio, photo, index, total
   }
 
   function endDrag() {
+    onEnd()
     dragRef.current = null
     setDragging(false)
   }
@@ -72,7 +76,7 @@ export default function PhotoAdjuster({ config, aspectRatio, photo, index, total
 
         <div
           className={`adjuster-canvas ${dragging ? 'dragging' : ''}`}
-          style={{ aspectRatio }}
+          style={{ aspectRatio, width: `min(100%, ${240 * aspectRatio}px)` }}
           onPointerDown={startDrag}
           onPointerMove={moveDrag}
           onPointerUp={endDrag}
@@ -87,19 +91,22 @@ export default function PhotoAdjuster({ config, aspectRatio, photo, index, total
           <button type="button" className={photo.fit === 'contain' ? 'selected' : ''} onClick={() => onChange({ fit: 'contain', scale: 1, offsetX: 0, offsetY: 0 })}>사진 전체 보이기</button>
         </div>
         <label className="zoom-control">
-          <span>확대</span>
+          <span>확대 · {photo.scale.toFixed(2)}배</span>
           <input
             type="range"
             disabled={photo.fit === 'contain'}
             min="1"
-            max="2.5"
-            step="0.02"
+            max="3"
+            step="0.01"
+            aria-label="사진 확대"
+            onPointerDown={onBegin} onPointerUp={onEnd} onPointerCancel={onEnd} onBlur={onEnd}
             value={photo.scale}
             onChange={(event) => onChange({ scale: Number(event.target.value) })}
           />
         </label>
 
-        <button type="button" className="reset-link" onClick={() => onChange({ scale: 1, offsetX: 0, offsetY: 0 })}>사진 위치 초기화</button>
+        <div className="segmented"><button type="button" onClick={()=>onChange({rotation:((photo.rotation+270)%360) as PhotoItem['rotation'],offsetX:0,offsetY:0})}>↶ 왼쪽 90°</button><button type="button" onClick={()=>onChange({rotation:((photo.rotation+90)%360) as PhotoItem['rotation'],offsetX:0,offsetY:0})}>↷ 오른쪽 90°</button></div>
+        <button type="button" className="reset-link" onClick={() => onChange({ scale: 1, offsetX: 0, offsetY: 0, rotation: 0 })}>사진 위치 초기화</button>
         <div className="adjuster-actions">
           <button type="button" className="soft-button" disabled={index <= 0} onClick={() => onMove(-1)}>← 앞칸</button>
           <button type="button" className="soft-button" disabled={index < 0 || index === total - 1} onClick={() => onMove(1)}>뒷칸 →</button>
