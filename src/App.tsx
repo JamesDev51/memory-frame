@@ -211,11 +211,11 @@ export default function App() {
   function selectForPlacement(id: string) {
     if (targetIndex !== null) { assignPhoto(id, targetIndex); return }
     setPlacementId(current => current === id ? null : id)
-    previewRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    if (window.innerWidth <= 900) previewRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
   }
   function chooseEmptySlot(index: number) {
     setTargetIndex(index); setPlacementId(null)
-    document.getElementById('photo-library')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    if (window.innerWidth <= 900) document.getElementById('photo-library')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
   }
   function removeFromLibrary(id: string) {
     if (id === selectedPhotoId) setSelectedPhotoId(null)
@@ -268,7 +268,7 @@ export default function App() {
     setConfig((current) => ({ ...current, frameId, frameVariantId: frame.variants[0].id }))
   }
 
-  function openPhoto(id: string) { history.endGroup(); setPlacementId(null); setTargetIndex(null); history.beginGroup(); setSelectedPhotoId(id); previewRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }) }
+  function openPhoto(id: string) { history.endGroup(); setPlacementId(null); setTargetIndex(null); history.beginGroup(); setSelectedPhotoId(id); if (window.innerWidth <= 900) previewRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }) }
   function closePhoto() { history.endGroup(); setSelectedPhotoId(null) }
 
   async function handleExport(format: 'png' | 'pdf', allowEmpty = false) {
@@ -435,7 +435,7 @@ export default function App() {
               {frameFinish !== 'paper' && <div className="finish-options" aria-label="미리보기 액자 색상">{(['black', 'white', 'wood'] as const).map(finish => <button type="button" key={finish} aria-pressed={frameFinish === finish} onClick={() => setFrameFinish(finish)}>{finish === 'black' ? '블랙' : finish === 'white' ? '화이트' : '우드'}</button>)}</div>}
             </div>
             {placementId && <div className="placement-message" role="status">넣을 칸을 눌러주세요. 이미 찬 칸도 바꿀 수 있어요.<button type="button" onClick={() => setPlacementId(null)}>취소</button></div>}
-            <div className="preview-stage" ref={previewRef}>
+            <div className="preview-stage" ref={previewRef} style={{ '--paper-aspect': paper(config).widthMm / paper(config).heightMm } as import('react').CSSProperties}>
               <FramePreview config={config} finish={frameFinish}>
               <PosterPreview
                 config={config}
@@ -472,6 +472,10 @@ export default function App() {
               <button type="button" className="soft-button" disabled={!history.canUndo} onClick={() => { history.undo(); setPlacementId(null); setTargetIndex(null) }}>↶ 실행 취소</button>
               <button type="button" className="soft-button" disabled={!history.canRedo} onClick={() => { history.redo(); setPlacementId(null); setTargetIndex(null) }}>↷ 다시 실행</button>
             </div>
+
+          </div>
+
+          <div className="library-column">
             {targetIndex !== null && <p className="placement-message" role="status">{targetIndex + 1}번 칸에 넣을 사진을 골라주세요.<button type="button" onClick={() => setTargetIndex(null)}>취소</button></p>}
             <PhotoLibrary photos={photos} placements={placements} selectedId={placementId}
               onAdd={() => editorInputRef.current?.click()} onSelect={selectForPlacement} onEdit={openPhoto} onRemove={removeFromLibrary}
