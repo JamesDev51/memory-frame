@@ -421,3 +421,13 @@ h1, h2, h3, p, button, label, summary { word-break: keep-all; overflow-wrap: bre
   .photo-adjuster .adjuster-canvas { max-width: 110px; }
   .inline-photo-editor { padding: 12px; }
 }
+
+.gap-slider { display: grid; gap: 8px; font-size: 13px; }
+.gap-slider > span:first-child { display: flex; justify-content: space-between; }
+.gap-slider input { width: 100%; min-height: 32px; accent-color: #785b46; }
+.library-filters { width: 100%; }
+.library-photo.is-used { border-color: #9bad9b; }
+.library-photo.is-used .library-thumb span { background: #345540e8; }
+.library-photo.is-unused .library-thumb span { background: #62564ce8; }
+.tile-remove { position: absolute; transform: translate(-100%, 0); z-index: 3; width: 24px; height: 24px; padding: 0; border: 1px solid #fff; border-radius: 50%; background: #24201de0; color: white; font-size: 18px; line-height: 1; cursor: pointer; }
+.tile-remove:focus-visible { outline: 3px solid #c65759; outline-offset: 2px; }

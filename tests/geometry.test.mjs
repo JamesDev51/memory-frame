@@ -13,7 +13,7 @@ const { getLayoutPreset, PHOTO_COUNTS, HEART_PHOTO_COUNTS } = await import(pathT
 const { slotsFor, paper, photoPlacement, photoDpis, safeMarginMm } = await import(pathToFileURL(path.join(root, 'utils/geometry.js')))
 const base = { frameId: 'white', frameVariantId: 'white', shadow: 'off', colorMode: 'color' }
 test('all supported combinations have exact count, non-overlapping tiles within the page', () => {
-  for (const type of ['grid', 'heart']) for (const count of (type === 'heart' ? HEART_PHOTO_COUNTS : PHOTO_COUNTS)) for (const gap of ['narrow', 'normal', 'wide']) for (const printSize of ['A5', 'A4', 'A3', 'A2', '5x7', '8x10', 'custom']) for (const mat of ['minimal', 'normal', 'wide']) for (const orientation of ['portrait', 'landscape']) {
+  for (const type of ['grid', 'heart']) for (const count of (type === 'heart' ? HEART_PHOTO_COUNTS : PHOTO_COUNTS)) for (const gap of [...Array.from({length:27},(_,i)=>i/1000), 'narrow', 'normal', 'wide']) for (const printSize of ['A5', 'A4', 'A3', 'A2', '5x7', '8x10', 'custom']) for (const mat of ['minimal', 'normal', 'wide']) for (const orientation of ['portrait', 'landscape']) {
     const config = { ...base, layout: getLayoutPreset(type, count), gap, printSize, orientation, mat, printUse: 'frame', frameOverlapMm: 8, customWidthMm: 80, customHeightMm: 600 }
     const page = paper(config), slots = slotsFor(config, page.width, page.height)
     assert.equal(slots.length, count)

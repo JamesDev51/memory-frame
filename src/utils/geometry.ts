@@ -22,8 +22,11 @@ export function safeMarginMm(config: EditorConfig) {
   const overlap = config.printUse === 'frame' ? (config.frameOverlapMm ?? 5) + 3 : 3
   return Math.max(overlap, short * ({ minimal: .04, normal: .09, wide: .15 }[config.mat ?? 'normal']))
 }
+export function gapRatio(gap: EditorConfig['gap']) {
+  return typeof gap === 'number' ? Math.max(0, Math.min(.026, Number.isFinite(gap) ? gap : .006)) : ({ narrow: .006, normal: .014, wide: .026 }[gap])
+}
 export function slotsFor(config: EditorConfig, width: number, height: number): Rect[] {
-  const gap = Math.min(width, height) * ({ narrow: .006, normal: .014, wide: .026 }[config.gap])
+  const gap = Math.min(width, height) * gapRatio(config.gap)
   const page = paper(config)
   const margin = safeMarginMm(config) * width / page.widthMm
   const availableW = width - 2 * margin, availableH = height - 2 * margin

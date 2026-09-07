@@ -1,14 +1,14 @@
-import { useEffect, useRef, useState } from 'react'
+import { Fragment, useEffect, useRef, useState } from 'react'
 import { paper, slotsFor } from '../utils/geometry'
 import { renderToCanvas } from '../utils/render'
 import type { EditorConfig, PhotoItem } from '../types/editor'
 interface Props {
   config: EditorConfig; photos: (PhotoItem | null)[]; selectedPhotoId?: string | null
   onSelectPhoto?: (id: string) => void
-  onAddPhoto?: (index: number) => void; interactive?: boolean
+  onAddPhoto?: (index: number) => void; onRemove?: (index: number) => void; interactive?: boolean
   placementId?: string | null; onPlace?: (id: string, index: number) => void; targetIndex?: number | null
 }
-export default function PosterPreview({ config, photos, selectedPhotoId, onSelectPhoto, onAddPhoto, placementId, onPlace, targetIndex, interactive = true }: Props) {
+export default function PosterPreview({ config, photos, selectedPhotoId, onSelectPhoto, onAddPhoto, onRemove, placementId, onPlace, targetIndex, interactive = true }: Props) {
   const ref = useRef<HTMLCanvasElement>(null)
   const [dropIndex, setDropIndex] = useState<number | null>(null)
   const [error, setError] = useState(false)
@@ -31,7 +31,7 @@ export default function PosterPreview({ config, photos, selectedPhotoId, onSelec
     {error && <span className="preview-error" role="alert">미리보기를 불러오지 못했어요. 사진을 다시 선택해주세요.</span>}
     {interactive && slots.map((slot, i) => {
       const photo = photos[i]
-      return <button key={photo?.id ?? `empty-${i}`} type="button"
+      return <Fragment key={i}><button type="button"
         className={`tile-hit ${photo ? '' : 'empty-photo'} ${photo?.id === selectedPhotoId ? 'selected-photo' : ''} ${placementId ? 'placement-target' : ''} ${dropIndex === i || targetIndex === i ? 'drop-target' : ''}`}
         style={{ left: `${slot.x / width * 100}%`, top: `${slot.y / height * 100}%`, width: `${slot.width / width * 100}%`, height: `${slot.height / height * 100}%` }}
         aria-label={placementId ? `${i + 1}번 칸에 사진 배치` : photo ? `${i + 1}번째 사진 편집` : `${i + 1}번 빈칸 채우기`}
@@ -46,6 +46,8 @@ export default function PosterPreview({ config, photos, selectedPhotoId, onSelec
 
         {photo ? <span className="photo-index">{i + 1}</span> : <span>＋</span>}
       </button>
+      {photo && onRemove && <button type="button" className="tile-remove" aria-label={`${i + 1}번 칸에서 사진 빼기`} title="칸에서 빼기 · 보관함에 유지" style={{ left: `${(slot.x + slot.width) / width * 100}%`, top: `${slot.y / height * 100}%` }} onClick={() => onRemove(i)}>×</button>}
+      </Fragment>
     })}
   </div>
 }

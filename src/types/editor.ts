@@ -42,7 +42,7 @@ export interface FramePreset {
 
 export interface EditorConfig {
   layout: LayoutPreset
-  gap: GapPreset
+  gap: GapPreset | number
   frameId: string
   frameVariantId: string
   shadow: ShadowMode

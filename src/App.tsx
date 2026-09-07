@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useEditorHistory } from './hooks/useEditorHistory'
-import { paper, slotsFor, photoDpis } from './utils/geometry'
+import { paper, slotsFor, photoDpis, gapRatio } from './utils/geometry'
 import PhotoLibrary from './components/PhotoLibrary'
 import FramePreview, { type FrameFinish } from './components/FramePreview'
-import { arrangedPhotos, fillEmpty, placePhoto, resizePlacements } from './utils/placements'
+import { arrangedPhotos, placePhoto, resizePlacements } from './utils/placements'
 import PosterPreview from './components/PosterPreview'
 import PhotoAdjuster from './components/PhotoAdjuster'
 import { framePresets, getFramePreset } from './presets/frames'
@@ -167,11 +167,11 @@ export default function App() {
       const empty = mode === 'replace-all' ? Array(config.layout.photoCount).fill(null) : placements
       history.beginGroup()
       setPhotos(all)
-      setPlacements(fillEmpty(empty, all))
+      setPlacements(empty)
       history.endGroup()
       setStep('editor')
       setTargetIndex(null); setPlacementId(null)
-      setToast(failed ? `${next.length}장을 추가했어요. 읽지 못한 ${failed}장은 다른 형식으로 다시 선택해주세요.` : `${next.length}장을 추가했어요. 남은 사진은 사진관리에서 바꿔 넣을 수 있어요.`)
+      setToast(failed ? `${next.length}장을 추가했어요. 읽지 못한 ${failed}장은 다른 형식으로 다시 선택해주세요.` : `${next.length}장을 추가했어요. 사진관리에서 원하는 칸에 직접 배치해주세요.`)
     } catch {
       setToast('일부 사진을 불러오지 못했어요. JPG, PNG, WEBP 사진을 사용해주세요.')
     } finally {
@@ -332,7 +332,7 @@ export default function App() {
 
           <div className="home-points">
             <article><strong>01</strong><h3>모양 고르기</h3><p>그리드 또는 하트, 딱 필요한 두 가지부터.</p></article>
-            <article><strong>02</strong><h3>사진 넣기</h3><p>여러 장을 한 번에 고르면 자동으로 채워져요.</p></article>
+            <article><strong>02</strong><h3>사진 넣기</h3><p>사진을 보관함에 넣고 원하는 칸에 배치해요.</p></article>
             <article><strong>03</strong><h3>바로 저장</h3><p>고화질 PNG와 A5부터 A2까지 PDF로 저장해요.</p></article>
           </div>
         </section>
@@ -397,7 +397,7 @@ export default function App() {
             <div className="flow-content compact-flow">
               <p className="step-label">3 / 3</p>
               <h2>사진을 골라주세요</h2>
-              <p className="step-desc">{config.layout.photoCount}칸을 먼저 채워드려요. 더 고른 사진도 보관함에 모두 남아요.</p>
+              <p className="step-desc">사진은 보관함에만 추가돼요. {config.layout.photoCount}칸에 원하는 사진을 직접 넣어주세요.</p>
               <button type="button" className="upload-card" onClick={() => uploadInputRef.current?.click()}>
                 <span className="upload-icon">＋</span>
                 <strong>사진 선택하기</strong>
@@ -443,6 +443,7 @@ export default function App() {
                 selectedPhotoId={selectedPhotoId}
                 onSelectPhoto={openPhoto}
                 onPlace={assignPhoto}
+                onRemove={index => { const id = placements[index]; setPlacements(current => current.map((value, i) => i === index ? null : value)); if (id === selectedPhotoId) closePhoto(); setToast('칸에서 뺐어요. 사진은 보관함에 남아 있어요.') }}
                 placementId={placementId}
                 targetIndex={targetIndex}
                 onAddPhoto={chooseEmptySlot}
@@ -474,7 +475,7 @@ export default function App() {
             {targetIndex !== null && <p className="placement-message" role="status">{targetIndex + 1}번 칸에 넣을 사진을 골라주세요.<button type="button" onClick={() => setTargetIndex(null)}>취소</button></p>}
             <PhotoLibrary photos={photos} placements={placements} selectedId={placementId}
               onAdd={() => editorInputRef.current?.click()} onSelect={selectForPlacement} onEdit={openPhoto} onRemove={removeFromLibrary}
-              onFill={() => setPlacements(current => fillEmpty(current, photos))} onCancel={() => setPlacementId(null)} />
+              onCancel={() => setPlacementId(null)} />
           </div>
 
           <aside className="control-panel">
@@ -534,18 +535,11 @@ export default function App() {
             <section className="control-section inline-controls">
               <div className="control-block">
                 <div className="control-title"><strong>사진 간격</strong></div>
-                <div className="segmented">
-                  {(['narrow', 'normal', 'wide'] as const).map((gap) => (
-                    <button
-                      type="button"
-                      key={gap}
-                      className={config.gap === gap ? 'selected' : ''}
-                      onClick={() => setConfig((current) => ({ ...current, gap }))}
-                    >
-                      {gap === 'narrow' ? '좁게' : gap === 'normal' ? '기본' : '넓게'}
-                    </button>
-                  ))}
-                </div>
+                <label className="gap-slider">
+                  <span>간격 <output>{(gapRatio(config.gap) * Math.min(paper(config).widthMm, paper(config).heightMm)).toFixed(1)} mm</output></span>
+                  <input aria-label="사진 간격" type="range" min="0" max="26" step="1" value={Math.round(gapRatio(config.gap) * 1000)} onPointerDown={() => history.beginGroup()} onPointerUp={() => history.endGroup()} onPointerCancel={() => history.endGroup()} onBlur={() => history.endGroup()} onChange={event => setConfig(c => ({ ...c, gap: Number(event.target.value) / 1000 }))} />
+                  <span className="print-note">붙이기부터 넓게까지 · 용지 크기에 비례해 적용돼요.</span>
+                </label>
               </div>
 
               <div className="shadow-control">
