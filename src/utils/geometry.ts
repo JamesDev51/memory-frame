@@ -36,11 +36,12 @@ export function slotsFor(config: EditorConfig, width: number, height: number): R
     }))
   }
   const { rows, columns } = config.layout
-  const cell = Math.min((availableW - gap * (columns - 1)) / columns, (availableH - gap * (rows - 1)) / rows)
-  const w = cell * columns + gap * (columns - 1), h = cell * rows + gap * (rows - 1)
+  // Fill the printable rectangle, keeping equal gutters and equal outer margins.
+  const cellW = (availableW - gap * (columns - 1)) / columns
+  const cellH = (availableH - gap * (rows - 1)) / rows
   return Array.from({ length: config.layout.photoCount }, (_, i) => ({
-    x: (width - w) / 2 + i % columns * (cell + gap),
-    y: (height - h) / 2 + Math.floor(i / columns) * (cell + gap), width: cell, height: cell,
+    x: margin + i % columns * (cellW + gap),
+    y: margin + Math.floor(i / columns) * (cellH + gap), width: cellW, height: cellH,
   }))
 }
 export function photoPlacement(photo: PhotoItem, width: number, height: number) {

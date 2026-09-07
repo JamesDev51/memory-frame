@@ -10,16 +10,16 @@ execFileSync('node_modules/.bin/tsc', ['src/utils/geometry.ts', 'src/utils/histo
 const geometryPath = path.join(root, 'utils/geometry.js')
 await fs.writeFile(geometryPath, (await fs.readFile(geometryPath, 'utf8')).replace("'../presets/layouts'", "'../presets/layouts.js'"))
 const { getLayoutPreset, PHOTO_COUNTS } = await import(pathToFileURL(path.join(root, 'presets/layouts.js')))
-const { slotsFor, paper, photoPlacement, photoDpis } = await import(pathToFileURL(path.join(root, 'utils/geometry.js')))
+const { slotsFor, paper, photoPlacement, photoDpis, safeMarginMm } = await import(pathToFileURL(path.join(root, 'utils/geometry.js')))
 const base = { frameId: 'white', frameVariantId: 'white', shadow: 'off', colorMode: 'color' }
-test('all 1512 combinations have exact count, square non-overlapping tiles within the page', () => {
+test('all 1512 combinations have exact count, non-overlapping tiles within the page', () => {
   for (const type of ['grid', 'heart']) for (const count of PHOTO_COUNTS) for (const gap of ['narrow', 'normal', 'wide']) for (const printSize of ['A5', 'A4', 'A3', 'A2', '5x7', '8x10', 'custom']) for (const mat of ['minimal', 'normal', 'wide']) for (const orientation of ['portrait', 'landscape']) {
     const config = { ...base, layout: getLayoutPreset(type, count), gap, printSize, orientation, mat, printUse: 'frame', frameOverlapMm: 8, customWidthMm: 80, customHeightMm: 600 }
     const page = paper(config), slots = slotsFor(config, page.width, page.height)
     assert.equal(slots.length, count)
     for (const [i, r] of slots.entries()) {
       assert.ok(r.width > 0 && r.height > 0)
-      assert.ok(Math.abs(r.width - r.height) < 1e-6)
+      if (type === 'heart') assert.ok(Math.abs(r.width - r.height) < 1e-6)
       assert.ok(r.x >= 0 && r.y >= 0 && r.x + r.width <= page.width && r.y + r.height <= page.height)
       for (const s of slots.slice(i + 1)) assert.ok(r.x + r.width <= s.x + 1e-6 || s.x + s.width <= r.x + 1e-6 || r.y + r.height <= s.y + 1e-6 || s.y + s.height <= r.y + 1e-6, `${type} ${count} ${gap}: overlap`)
     }
@@ -108,5 +108,30 @@ test('all frame photos stay beyond the selected overlap even with minimum margin
     const config = { ...base, layout:getLayoutPreset('heart',20), printSize, orientation:'portrait', gap:'wide', mat:'minimal', printUse:'frame', frameOverlapMm:8, customWidthMm:80, customHeightMm:100 }
     const page=paper(config), overlap=8*page.width/page.widthMm
     for(const slot of slotsFor(config,page.width,page.height)) assert.ok(slot.x>=overlap && slot.y>=overlap && slot.x+slot.width<=page.width-overlap && slot.y+slot.height<=page.height-overlap)
+  }
+})
+
+test('grid fills all four edges with equal margins and identical horizontal/vertical gutters', () => {
+  for (const count of PHOTO_COUNTS) for (const printSize of ['A5','A4','A3','A2','5x7','8x10','custom']) for (const orientation of ['portrait','landscape']) for (const mat of ['minimal','normal','wide']) for (const gap of ['narrow','normal','wide']) for (const swap of [false,true]) {
+    const layout = {...getLayoutPreset('grid',count)}
+    if(swap) [layout.rows,layout.columns]=[layout.columns,layout.rows]
+    const config={...base,layout,printSize,orientation,mat,gap,printUse:'frame',frameOverlapMm:5,customWidthMm:180,customHeightMm:320}
+    const page=paper(config), slots=slotsFor(config,page.width,page.height), first=slots[0], last=slots.at(-1)
+    const margin=safeMarginMm(config)*page.width/page.widthMm
+    const near=(a,b)=>assert.ok(Math.abs(a-b)<1e-6,`${a} != ${b}`)
+    near(first.x,margin);near(first.y,margin)
+    near(page.width-last.x-last.width,margin);near(page.height-last.y-last.height,margin)
+    near(slots[1].x-first.x-first.width,slots[layout.columns].y-first.y-first.height)
+    const preview=slotsFor(config,900,900*page.height/page.width)
+    for(let i=0;i<slots.length;i++) for(const key of ['x','y','width','height']) near(preview[i][key]/900,slots[i][key]/page.width)
+  }
+})
+test('rectangular grid crops fill without gaps and contain preserves the original',()=>{
+  for(const [w,h] of [[300,500],[500,300]]) for(const [nw,nh] of [[600,1800],[1800,600],[1000,1000]]) {
+    const photo={naturalWidth:nw,naturalHeight:nh,scale:1.5,offsetX:1,offsetY:-1}
+    const c=photoPlacement({...photo,fit:'cover'},w,h)
+    assert.ok(c.x<=1e-6&&c.y<=1e-6&&c.x+c.width>=w-1e-6&&c.y+c.height>=h-1e-6)
+    const f=photoPlacement({...photo,fit:'contain'},w,h)
+    assert.ok(f.x>=0&&f.y>=0&&f.x+f.width<=w+1e-6&&f.y+f.height<=h+1e-6)
   }
 })

@@ -42,3 +42,7 @@ Implementation commit c9d4060c8b3cb7819fefb7d4cb7a45307f917ef7:
 - Production browser navigation timed out, and one browser-runtime recovery also timed out. Therefore no claim is made that V1.3 desktop drag, mobile interaction, visual Heart appearance or custom-size downloaded files were verified in the live browser. These remain manual acceptance checks.
 - V1.2 production PDF/PNG results above are historical evidence, not V1.3 end-to-end results.
 - Production alias HTTP 200; HTML references `index-BKfiJD1q.js` and `index-C3Czh4o-.css`, matching the local V1.3 production build.
+
+## V1.4 검수
+
+`npm test` 14개 통과. 기존 1,512개 비겹침/경계 검사와 별도로 그리드 1,512개 조합(개수·용지·방향·여백·간격·행열 전환)에서 네 방향 균일 여백, 가로/세로 동일 간격, 미리보기/출력 좌표 비례를 검사했다. 직사각형 칸에서 cover/contain 보존 검사도 통과했다. `npm run build` 통과. 실물 인쇄 및 모바일 조작 검수는 별도 미완료이며 이번 기록은 계산·빌드 검수다.

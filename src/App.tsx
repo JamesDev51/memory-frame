@@ -15,7 +15,7 @@ type Step = 'home' | 'layout' | 'count' | 'upload' | 'editor'
 
 const initialConfig: EditorConfig = {
   layout: getLayoutPreset('grid', 9),
-  gap: 'normal',
+  gap: 'narrow',
   frameId: 'white',
   frameVariantId: 'white',
   shadow: 'on',
@@ -23,7 +23,7 @@ const initialConfig: EditorConfig = {
   orientation: 'portrait',
   colorMode: 'color',
   customWidthMm: 210, customHeightMm: 297,
-  printUse: 'frame', mat: 'normal', frameOverlapMm: 5,
+  printUse: 'frame', mat: 'minimal', frameOverlapMm: 5,
 }
 
 function loadDimensions(url: string): Promise<{ width: number; height: number }> {
@@ -137,7 +137,7 @@ export default function App() {
   function chooseLayout(type: LayoutType) {
     const count = type === 'heart' ? 12 : 9
     history.beginGroup()
-    setConfig((current) => ({ ...current, layout: getLayoutPreset(type, count) }))
+    setConfig((current) => ({ ...current, layout: getLayoutPreset(type, count), mat: type === 'grid' ? 'minimal' : 'normal', gap: type === 'grid' ? 'narrow' : 'normal' }))
     setPlacements(resizePlacements(placements, count))
     history.endGroup()
     setStep('count')
@@ -498,6 +498,15 @@ export default function App() {
                 </div>
               )}
             </section>
+
+            {config.layout.type === 'grid' && <section className="control-section">
+              <div className="control-title"><strong>그리드 여백</strong></div>
+              <div className="segmented">
+                <button type="button" aria-pressed={config.mat === 'minimal'} className={config.mat === 'minimal' ? 'selected' : ''} onClick={() => setConfig(c => ({ ...c, mat: 'minimal' }))}>꽉 채우기</button>
+                <button type="button" aria-pressed={config.mat !== 'minimal'} className={config.mat !== 'minimal' ? 'selected' : ''} onClick={() => setConfig(c => ({ ...c, mat: 'normal' }))}>여백 있게</button>
+              </div>
+              <p className="print-note">용지에 맞춰 사진 칸이 채워져요. 액자에 가려질 가장자리는 남겨둬요.</p>
+            </section>}
 
             <section className="control-section inline-controls">
               <div className="control-block">

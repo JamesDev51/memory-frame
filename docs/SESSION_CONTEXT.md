@@ -552,3 +552,7 @@ User asked to resolve remaining Heart crop issues and add print-size/color choic
 ## 24. V1.3 handoff — 2026-09-07
 
 User reported orphaned Korean heading syllable, awkward Heart, difficult additional multi-selection, and requested photo management plus dragging into layouts. Physical wedding photo-table/wall frames are now explicit use cases. Implemented photo bank + slot ID model, repeated bulk addition without truncation, swap/replace through native desktop drag or photo-then-slot selection, reversible unplace/count decrease, tapered Heart tiles, and frame-aware paper settings. Added inch/custom paper, mat presets and edge overlap preview. Follow docs/V1_3_PLAN.md and VALIDATION.md; do not claim actual printer or phone verification without evidence.
+
+## V1.4 — 용지를 채우는 그리드 (2026-09-07)
+
+그리드의 정사각형 고정을 해제하고 용지 내부 사각 영역을 직사각형 사진 칸으로 채운다. 네 방향 바깥 여백과 가로·세로 사진 간격은 동일하다. 기본은 좁은 간격 + 최소 액자 안전 여백이며, 편집 화면에서 ‘꽉 채우기 / 여백 있게’를 선택할 수 있다. 기본 세로 용지에 맞춰 6/12/20장은 각각 2열×3행 / 3열×4행 / 4열×5행으로 시작한다. 행열 전환 기능은 유지한다. 하트는 기존 실루엣을 유지한다. 미리보기·사진 조정·PNG/PDF는 공통 칸 계산을 사용한다. 칸 채우기는 원본 일부를 자를 수 있으며 사진 전체 보기 옵션을 유지한다.

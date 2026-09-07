@@ -2,11 +2,11 @@ import type { LayoutPreset, LayoutType } from '../types/editor'
 
 const gridShapes: Record<number, [number, number]> = {
   4: [2, 2],
-  6: [2, 3],
+  6: [3, 2],
   9: [3, 3],
-  12: [3, 4],
+  12: [4, 3],
   16: [4, 4],
-  20: [4, 5],
+  20: [5, 4],
 }
 
 export const PHOTO_COUNTS = [4, 6, 9, 12, 16, 20]
