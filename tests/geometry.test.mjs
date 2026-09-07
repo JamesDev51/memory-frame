@@ -6,7 +6,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 const root = await fs.mkdtemp(path.join(os.tmpdir(), 'memory-frame-test-'))
-execFileSync('node_modules/.bin/tsc', ['src/utils/geometry.ts', '--ignoreConfig', '--target', 'es2022', '--module', 'esnext', '--moduleResolution', 'bundler', '--skipLibCheck', '--outDir', root])
+execFileSync('node_modules/.bin/tsc', ['src/utils/geometry.ts', 'src/utils/history.ts', '--ignoreConfig', '--target', 'es2022', '--module', 'esnext', '--moduleResolution', 'bundler', '--skipLibCheck', '--outDir', root])
 const geometryPath = path.join(root, 'utils/geometry.js')
 await fs.writeFile(geometryPath, (await fs.readFile(geometryPath, 'utf8')).replace("'../presets/layouts'", "'../presets/layouts.js'"))
 const { getLayoutPreset, PHOTO_COUNTS } = await import(pathToFileURL(path.join(root, 'presets/layouts.js')))
@@ -44,4 +44,33 @@ test('effective DPI decreases with enlargement and larger paper', () => {
   const normal = photoDpis(config, [photo])[0]
   assert.ok(photoDpis(config, [{ ...photo, scale: 2 }])[0] < normal)
   assert.ok(photoDpis({ ...config, printSize: 'A2' }, [photo])[0] < normal)
+})
+
+const { updateHistory, undoHistory, redoHistory } = await import(pathToFileURL(path.join(root, 'utils/history.js')))
+test('undo and redo preserve removed/replaced photo resources and fit settings', () => {
+  const a = { id: 'a', url: 'blob:a', fit: 'contain' }, b = { id: 'b', url: 'blob:b' }
+  const initial = { past: [], present: { config: {}, photos: [a, b] }, future: [] }
+  const deleted = updateHistory(initial, 'photos', [b], true)
+  assert.deepEqual(undoHistory(deleted).present.photos, [a, b])
+  assert.deepEqual(redoHistory(undoHistory(deleted)).present.photos, [b])
+  const replacement = updateHistory(initial, 'photos', [{ ...a, url: 'blob:new' }, b], true)
+  assert.equal(undoHistory(replacement).present.photos[0].url, 'blob:a')
+})
+test('a grouped count reduction restores both layout and photos in one undo', () => {
+  const photos = Array.from({length:12}, (_,i) => ({id:String(i), url:`blob:${i}`}))
+  const initial = { past: [], present: { config: { count: 12 }, photos }, future: [] }
+  const removed = updateHistory(initial, 'photos', photos.slice(0,4), true)
+  const changed = updateHistory(removed, 'config', {count:4}, false)
+  assert.deepEqual(undoHistory(changed).present, initial.present)
+  assert.deepEqual(redoHistory(undoHistory(changed)).present, changed.present)
+})
+test('history is bounded and a new edit after undo clears the redo branch', () => {
+  let h = { past: [], present: { config: {n:0}, photos: [] }, future: [] }
+  for(let i=1;i<=60;i++) h=updateHistory(h,'config',{n:i},true)
+  assert.equal(h.past.length,40)
+  h=undoHistory(h)
+  assert.equal(h.present.config.n,59)
+  h=updateHistory(h,'config',{n:100},true)
+  assert.equal(h.future.length,0)
+  assert.equal(redoHistory(h).present.config.n,100)
 })

@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState, type SetStateAction } from 'react'
 import type { EditorConfig, PhotoItem } from '../types/editor'
-type Snapshot = { config: EditorConfig; photos: PhotoItem[] }
+import { updateHistory, undoHistory, redoHistory, type Snapshot, type History } from '../utils/history'
 export function useEditorHistory(initialConfig: EditorConfig) {
-  const [history, setHistory] = useState<{ past: Snapshot[]; present: Snapshot; future: Snapshot[] }>({ past: [], present: { config: initialConfig, photos: [] }, future: [] })
+  const [history, setHistory] = useState<History>({ past: [], present: { config: initialConfig, photos: [] }, future: [] })
   const group = useRef(false)
   const groupSaved = useRef(false)
   const urls = useRef(new Set<string>())
@@ -14,14 +14,13 @@ export function useEditorHistory(initialConfig: EditorConfig) {
     groupSaved.current = true
     setHistory(h => {
       const next = typeof value === 'function' ? (value as (v: Snapshot[K]) => Snapshot[K])(h.present[key]) : value
-      if (next === h.present[key]) return h
-      return { past: checkpoint ? [...h.past, h.present].slice(-40) : h.past, present: { ...h.present, [key]: next }, future: [] }
+      return updateHistory(h, key, next, checkpoint)
     })
   }, [])
   const setConfig = useCallback((v: SetStateAction<EditorConfig>) => update('config', v), [update])
   const setPhotos = useCallback((v: SetStateAction<PhotoItem[]>) => update('photos', v), [update])
-  function undo() { setHistory(h => h.past.length ? { past: h.past.slice(0, -1), present: h.past[h.past.length - 1], future: [h.present, ...h.future] } : h) }
-  function redo() { setHistory(h => h.future.length ? { past: [...h.past, h.present], present: h.future[0], future: h.future.slice(1) } : h) }
+  function undo() { setHistory(undoHistory) }
+  function redo() { setHistory(redoHistory) }
   function beginGroup() { group.current = true; groupSaved.current = false }
   function endGroup() { group.current = false; groupSaved.current = false }
   function reset() {
