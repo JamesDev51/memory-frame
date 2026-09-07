@@ -1,7 +1,11 @@
-import { useRef, useState, type PointerEvent } from 'react'
-import type { PhotoItem } from '../types/editor'
+import { useEffect, useRef, useState, type PointerEvent } from 'react'
+import { drawPhoto, loadImage } from '../utils/render'
+import { photoPlacement } from '../utils/geometry'
+import type { EditorConfig, PhotoItem } from '../types/editor'
 
 interface PhotoAdjusterProps {
+  config: EditorConfig
+  aspectRatio: number
   photo: PhotoItem
   index: number
   total: number
@@ -14,12 +18,25 @@ interface PhotoAdjusterProps {
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value))
 
-export default function PhotoAdjuster({ photo, index, total, onChange, onReplace, onDelete, onMove, onClose }: PhotoAdjusterProps) {
+export default function PhotoAdjuster({ config, aspectRatio, photo, index, total, onChange, onReplace, onDelete, onMove, onClose }: PhotoAdjusterProps) {
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+  useEffect(() => {
+    let active = true
+    void loadImage(photo.url).then(image => {
+      if (!active || !canvasRef.current) return
+      const canvas = canvasRef.current
+      canvas.width = 700; canvas.height = Math.round(700 / aspectRatio)
+      const ctx = canvas.getContext('2d')!
+      drawPhoto(ctx, image, photo, { x: 0, y: 0, width: canvas.width, height: canvas.height }, { ...config, shadow: 'off' })
+    }).catch(() => {})
+    return () => { active = false }
+  }, [photo, config, aspectRatio])
   const inputRef = useRef<HTMLInputElement>(null)
   const dragRef = useRef<{ x: number; y: number; offsetX: number; offsetY: number } | null>(null)
   const [dragging, setDragging] = useState(false)
 
   function startDrag(event: PointerEvent<HTMLDivElement>) {
+    if (photo.fit === 'contain') return
     event.currentTarget.setPointerCapture(event.pointerId)
     dragRef.current = { x: event.clientX, y: event.clientY, offsetX: photo.offsetX, offsetY: photo.offsetY }
     setDragging(true)
@@ -28,11 +45,10 @@ export default function PhotoAdjuster({ photo, index, total, onChange, onReplace
   function moveDrag(event: PointerEvent<HTMLDivElement>) {
     if (!dragRef.current) return
     const rect = event.currentTarget.getBoundingClientRect()
-    const dx = (event.clientX - dragRef.current.x) / rect.width
-    const dy = (event.clientY - dragRef.current.y) / rect.height
+    const placement = photoPlacement(photo, rect.width, rect.height)
     onChange({
-      offsetX: clamp(dragRef.current.offsetX + dx * 2.3, -1, 1),
-      offsetY: clamp(dragRef.current.offsetY + dy * 2.3, -1, 1),
+      offsetX: placement.maxX ? clamp(dragRef.current.offsetX + (event.clientX - dragRef.current.x) / placement.maxX, -1, 1) : 0,
+      offsetY: placement.maxY ? clamp(dragRef.current.offsetY + (event.clientY - dragRef.current.y) / placement.maxY, -1, 1) : 0,
     })
   }
 
@@ -55,26 +71,25 @@ export default function PhotoAdjuster({ photo, index, total, onChange, onReplace
 
         <div
           className={`adjuster-canvas ${dragging ? 'dragging' : ''}`}
+          style={{ aspectRatio }}
           onPointerDown={startDrag}
           onPointerMove={moveDrag}
           onPointerUp={endDrag}
           onPointerCancel={endDrag}
         >
-          <img
-            src={photo.url}
-            alt="선택한 사진 미리보기"
-            draggable={false}
-            style={{
-              transform: `translate(-50%, -50%) translate(${photo.offsetX * 24}%, ${photo.offsetY * 24}%) scale(${photo.scale}) rotate(${photo.rotation}deg)`,
-            }}
-          />
-          <span className="drag-hint">손가락으로 사진을 움직여보세요</span>
+          <canvas ref={canvasRef} aria-label="선택한 사진 미리보기" />
+          <span className="drag-hint">{photo.fit === 'contain' ? '사진 전체를 보여주고 있어요' : '사진을 움직여 위치를 맞춰보세요'}</span>
         </div>
 
+        <div className="segmented fit-controls" aria-label="사진 맞춤">
+          <button type="button" className={photo.fit === 'cover' ? 'selected' : ''} onClick={() => onChange({ fit: 'cover', scale: 1, offsetX: 0, offsetY: 0 })}>꽉 채우기</button>
+          <button type="button" className={photo.fit === 'contain' ? 'selected' : ''} onClick={() => onChange({ fit: 'contain', scale: 1, offsetX: 0, offsetY: 0 })}>사진 전체 보이기</button>
+        </div>
         <label className="zoom-control">
           <span>확대</span>
           <input
             type="range"
+            disabled={photo.fit === 'contain'}
             min="1"
             max="2.5"
             step="0.02"
@@ -83,6 +98,7 @@ export default function PhotoAdjuster({ photo, index, total, onChange, onReplace
           />
         </label>
 
+        <button type="button" className="reset-link" onClick={() => onChange({ scale: 1, offsetX: 0, offsetY: 0 })}>사진 위치 초기화</button>
         <div className="adjuster-actions">
           <button type="button" className="soft-button" disabled={index === 0} onClick={() => onMove(-1)}>← 앞칸</button>
           <button type="button" className="soft-button" disabled={index === total - 1} onClick={() => onMove(1)}>뒷칸 →</button>

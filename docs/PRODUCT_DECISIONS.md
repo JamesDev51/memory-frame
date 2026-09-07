@@ -214,3 +214,7 @@ Before introducing a future feature, answer:
 - Did users ask for it, or is it just easy to engineer?
 
 Prefer fewer, better choices.
+
+## V1.2 approved additions — 2026-09-06
+
+User approved implementation, review, GitHub push and Vercel production testing of the proposed revision. Added A2 and paper orientation, three color modes, effective print DPI warnings, contain/cover, reset, undo/redo, partial upload recovery and empty-slot confirmation. Keep all controls in focused photo/print sheets. Original row/column and free-color-picker exclusions remain. Persistent continuation and sharing remain deferred. See PRD section 28.

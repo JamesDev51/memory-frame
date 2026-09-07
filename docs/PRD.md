@@ -659,3 +659,18 @@ When a future development session is unsure whether to add a feature, ask:
 5. Is this something users actually asked for, or merely something developers can build?
 
 If the answer is weak, defer the feature.
+
+## 28. Approved V1.2 revision (2026-09-06)
+
+This section supersedes earlier conflicting V1 requirements.
+
+- Heart remains intact tiles; all presets use square tiles (a smaller square tip for 4). Low counts have a simplified silhouette; recommend 12+ and show count thumbnails.
+- Each photo supports cover/contain and reset. Contain always resets position/zoom and displays the complete original with a neutral mat; cover panning is bounded by actual image overflow.
+- One shared geometry/Canvas renderer powers editor preview, adjustment and PNG/PDF. Grid cells are square, with proportional page gaps. Grid orientation remains separate from page orientation.
+- Paper sizes: A5, A4 (default), A3, A2. Portrait/landscape applies to both PNG and PDF, selected with a live print preview.
+- Color modes: color, photos-only grayscale, whole-poster grayscale. Exported pixels carry the effect; printer settings remain independent.
+- 300 DPI target; explicit 150 DPI option for memory/export trouble, never an automatic silent downgrade. Warn on effective photo resolution (<150 DPI stronger warning, <300 advisory), accounting for paper size and zoom.
+- Warn before exporting empty slots; preserve editing after failure; retain successfully decoded images when some selections fail.
+- Undo/redo (40 checkpoints), photo dialog edits grouped, including deletion/replacement and count reduction. Object URLs stay valid while referenced by current state or history.
+- Deferred: persistent project continuation and sharing. No server/upload/login introduced.
+- See IMPLEMENTATION_PLAN.md and VALIDATION.md for delivery scope and actual validation evidence.

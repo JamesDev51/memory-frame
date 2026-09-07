@@ -66,3 +66,14 @@ npm run dev
 ```bash
 npm run build
 ```
+
+## V1.2
+
+- Shared preview / adjustment / export renderer; square-tile Heart compositions.
+- Cover / show whole photo, bounded drag, reset, undo / redo.
+- A5 / A4 / A3 / A2, portrait / landscape, PNG and PDF.
+- Color / photos-only grayscale / entire poster grayscale.
+- Effective source DPI guidance, explicit 150-DPI fallback, partial-upload recovery and empty-slot confirmation.
+- `npm ci`, `npm test`, `npm run build`.
+
+[Implementation plan](docs/IMPLEMENTATION_PLAN.md) · [Validation record](docs/VALIDATION.md).

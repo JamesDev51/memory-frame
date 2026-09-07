@@ -12,6 +12,7 @@ export interface PhotoItem {
   scale: number
   offsetX: number
   offsetY: number
+  fit: 'cover' | 'contain'
   rotation: 0 | 90 | 180 | 270
 }
 
@@ -45,4 +46,7 @@ export interface EditorConfig {
   frameId: string
   frameVariantId: string
   shadow: ShadowMode
+  printSize: 'A5' | 'A4' | 'A3' | 'A2'
+  orientation: 'portrait' | 'landscape'
+  colorMode: 'color' | 'photos-gray' | 'all-gray'
 }

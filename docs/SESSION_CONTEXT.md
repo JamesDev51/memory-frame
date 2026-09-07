@@ -544,3 +544,7 @@ Before adding a new feature, preserve these user preferences:
 - visual quality over feature quantity.
 
 When ambiguous, prefer **simpler UI and better presets** over additional controls.
+
+## 23. V1.2 handoff — 2026-09-06
+
+User asked to resolve remaining Heart crop issues and add print-size/color choices, then approved detailed planning, implementation/review cycles, GitHub push and Vercel deployment with actual tests. Earlier code had preview offsets 24% vs export 35%, fixed screen gaps vs proportional export gaps, and mismatched photo adjustment aspect ratios. V1.2 replaces that split with shared geometry + Canvas rendering, adds square Heart presets, cover/contain, A2, paper orientation, color/grayscale, effective DPI warnings and reversible edits. Do not equate rectangular tiles with zero source-photo cropping: cover still crops; contain shows the complete original. See PRD section 28 and VALIDATION.md for current requirements and evidence.

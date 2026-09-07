@@ -3,6 +3,7 @@ name: CI
 on:
   push:
     branches: [master]
+  pull_request:
   workflow_dispatch:
 
 jobs:
@@ -16,7 +17,9 @@ jobs:
         with:
           node-version: 22
       - name: Install
-        run: npm install
+        run: npm ci
+      - name: Test
+        run: npm test
       - name: Build
         run: npm run build
       - name: Upload production bundle

@@ -18,81 +18,36 @@ export interface HeartSlot {
   height: number
 }
 
-const heartRows: Record<number, Array<{ count: number; span: number }>> = {
-  4: [
-    { count: 2, span: 0.68 },
-    { count: 1, span: 0.34 },
-    { count: 1, span: 0.22 },
-  ],
-  6: [
-    { count: 2, span: 0.7 },
-    { count: 3, span: 0.9 },
-    { count: 1, span: 0.24 },
-  ],
-  9: [
-    { count: 2, span: 0.68 },
-    { count: 3, span: 0.92 },
-    { count: 3, span: 0.72 },
-    { count: 1, span: 0.22 },
-  ],
-  12: [
-    { count: 2, span: 0.68 },
-    { count: 4, span: 0.96 },
-    { count: 3, span: 0.78 },
-    { count: 2, span: 0.5 },
-    { count: 1, span: 0.2 },
-  ],
-  16: [
-    { count: 2, span: 0.68 },
-    { count: 4, span: 0.96 },
-    { count: 4, span: 0.92 },
-    { count: 3, span: 0.72 },
-    { count: 2, span: 0.46 },
-    { count: 1, span: 0.2 },
-  ],
-  20: [
-    { count: 2, span: 0.68 },
-    { count: 4, span: 0.96 },
-    { count: 5, span: 1 },
-    { count: 4, span: 0.88 },
-    { count: 3, span: 0.66 },
-    { count: 2, span: 0.38 },
-  ],
+// Square tiles: spaced lobes followed by a broad middle and taper.
+const heartRows: Record<number, number[][]> = {
+  4: [[-1, 1], [0], [0]],
+  6: [[-1, 1], [-1, 0, 1], [0]],
+  9: [[-1, 1], [-1.5, -.5, .5, 1.5], [-.5, .5], [0]],
+  12: [[-1, 1], [-1.5, -.5, .5, 1.5], [-1, 0, 1], [-.5, .5], [0]],
+  16: [[-1.5, -.5, 1.5, .5], [-2, -1, 0, 1, 2], [-1.5, -.5, .5, 1.5], [-.5, .5], [0]],
+  20: [[-1.5, -.5, .5, 1.5], [-2, -1, 0, 1, 2], [-2, -1, 0, 1, 2], [-1, 0, 1], [-.5, .5], [0]],
 }
 
 export function getHeartSlots(photoCount: number): HeartSlot[] {
   const rows = heartRows[photoCount] ?? heartRows[12]
-  const rowHeight = 1 / rows.length
-  const cellHeight = rowHeight * 0.86
-  const slots: HeartSlot[] = []
-
-  rows.forEach((row, rowIndex) => {
-    const y = rowIndex * rowHeight + (rowHeight - cellHeight) / 2
-
-    if (rowIndex === 0 && row.count === 2) {
-      const width = Math.min(0.28, rowHeight * 1.2)
-      const centers = [0.28, 0.72]
-      centers.forEach((center) => {
-        slots.push({ x: center - width / 2, y, width, height: cellHeight })
-      })
-      return
+  const units = Math.max(rows.length, ...rows.map(row => Math.max(...row) - Math.min(...row) + 1))
+  const pitch = 1 / units
+  const slots = rows.flatMap((row, r) => row.slice().sort((a, b) => a - b).map(c => {
+    // Lift the outer lobe tiles for larger compositions to create a central notch.
+    const lift = r === 0 && photoCount >= 16 && Math.abs(c) > 1 ? .28 : 0
+    const side = photoCount === 4 && r === 2 ? .68 : 1
+    return {
+      x: .5 + (c - side / 2) * pitch,
+      y: (r + .3 - lift + (1 - side) / 2) * pitch,
+      width: side * pitch,
+      height: side * pitch,
     }
-
-    const width = Math.min(row.span / row.count, rowHeight * 1.2)
-    const totalWidth = width * row.count
-    const startX = 0.5 - totalWidth / 2
-
-    for (let index = 0; index < row.count; index += 1) {
-      slots.push({
-        x: startX + width * index,
-        y,
-        width,
-        height: cellHeight,
-      })
-    }
-  })
-
-  return slots.slice(0, photoCount)
+  }))
+  const left = Math.min(...slots.map(s => s.x)), top = Math.min(...slots.map(s => s.y))
+  const w = Math.max(...slots.map(s => s.x + s.width)) - left
+  const h = Math.max(...slots.map(s => s.y + s.height)) - top
+  const extent = Math.max(w, h)
+  return slots.map(s => ({ x: (s.x - left + (extent - w) / 2) / extent, y: (s.y - top + (extent - h) / 2) / extent, width: s.width / extent, height: s.height / extent }))
 }
 
 export function getLayoutPreset(type: LayoutType, photoCount: number): LayoutPreset {
